@@ -81,7 +81,6 @@ class UIB_PT_main(bpy.types.Panel):
             else:
                 box.operator("ui_builder.reload_scripts", icon="FILE_REFRESH")
 
-        layout.menu("UIB_MT_add", text="Add Element", icon="ADD")
         row = layout.row()
         row.template_list("UIB_UL_elements", "", s, "elements", s, "active_index", rows=8)
         col = row.column(align=True)
@@ -93,6 +92,9 @@ class UIB_PT_main(bpy.types.Panel):
         col.separator()
         col.operator("ui_builder.indent", icon="FORWARD", text="").direction = "IN"
         col.operator("ui_builder.indent", icon="BACK", text="").direction = "OUT"
+        big = layout.row()
+        big.scale_y = 2.0
+        big.menu("UIB_MT_add", text="Add Element", icon="ADD")
         if not len(s.elements):
             box = layout.box()
             box.label(text="Start with: Add Element > Layout > Panel", icon="INFO")
