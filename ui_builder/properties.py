@@ -9,6 +9,8 @@ from bpy.props import (
 from . import elements as el
 
 _enum_cache = {}
+_VALUE_TIP = ("Mockup value. Blender cannot set tooltips per element at runtime, so the tooltip you wrote "
+              "is shown under the element (toggle in the preview). The exported addon uses it as the real tooltip")
 
 
 def _enum_value_items(self, context):
@@ -112,31 +114,31 @@ class UIB_Element(bpy.types.PropertyGroup):
     range_max: FloatProperty(name="Max", default=1.0)
 
     # Values: shown in the mockup, exported as property defaults
-    bool_value: BoolProperty(name="Value")
-    int_value: IntProperty(name="Value")
-    float_value: FloatProperty(name="Value")
-    slider_value: FloatProperty(name="Value", min=0.0, max=1.0, default=0.5)
-    factor_value: FloatProperty(name="Value", min=0.0, max=1.0, default=0.5, subtype="FACTOR")
-    percent_value: FloatProperty(name="Value", min=0.0, max=100.0, default=50.0, subtype="PERCENTAGE")
-    angle_value: FloatProperty(name="Value", subtype="ANGLE", unit="ROTATION")
-    distance_value: FloatProperty(name="Value", subtype="DISTANCE", unit="LENGTH")
-    string_value: StringProperty(name="Value")
-    file_value: StringProperty(name="Value", subtype="FILE_PATH")
-    dir_value: StringProperty(name="Value", subtype="DIR_PATH")
-    enum_value: EnumProperty(name="Value", items=_enum_value_items)
-    color_value: FloatVectorProperty(name="Value", size=3, subtype="COLOR", min=0.0, max=1.0,
+    bool_value: BoolProperty(name="Value", description=_VALUE_TIP)
+    int_value: IntProperty(name="Value", description=_VALUE_TIP)
+    float_value: FloatProperty(name="Value", description=_VALUE_TIP)
+    slider_value: FloatProperty(name="Value", description=_VALUE_TIP, min=0.0, max=1.0, default=0.5)
+    factor_value: FloatProperty(name="Value", description=_VALUE_TIP, min=0.0, max=1.0, default=0.5, subtype="FACTOR")
+    percent_value: FloatProperty(name="Value", description=_VALUE_TIP, min=0.0, max=100.0, default=50.0, subtype="PERCENTAGE")
+    angle_value: FloatProperty(name="Value", description=_VALUE_TIP, subtype="ANGLE", unit="ROTATION")
+    distance_value: FloatProperty(name="Value", description=_VALUE_TIP, subtype="DISTANCE", unit="LENGTH")
+    string_value: StringProperty(name="Value", description=_VALUE_TIP)
+    file_value: StringProperty(name="Value", description=_VALUE_TIP, subtype="FILE_PATH")
+    dir_value: StringProperty(name="Value", description=_VALUE_TIP, subtype="DIR_PATH")
+    enum_value: EnumProperty(name="Value", description=_VALUE_TIP, items=_enum_value_items)
+    color_value: FloatVectorProperty(name="Value", description=_VALUE_TIP, size=3, subtype="COLOR", min=0.0, max=1.0,
                                      default=(0.8, 0.8, 0.8))
-    color_alpha_value: FloatVectorProperty(name="Value", size=4, subtype="COLOR", min=0.0, max=1.0,
+    color_alpha_value: FloatVectorProperty(name="Value", description=_VALUE_TIP, size=4, subtype="COLOR", min=0.0, max=1.0,
                                            default=(0.8, 0.8, 0.8, 1.0))
-    vec2_value: FloatVectorProperty(name="Value", size=2)
-    vec3_value: FloatVectorProperty(name="Value", size=3, subtype="XYZ")
-    euler_value: FloatVectorProperty(name="Value", size=3, subtype="EULER")
-    progress_factor: FloatProperty(name="Value", min=0.0, max=1.0, default=0.5, subtype="FACTOR")
-    ptr_object: PointerProperty(type=bpy.types.Object, name="Value")
-    ptr_material: PointerProperty(type=bpy.types.Material, name="Value")
-    ptr_collection: PointerProperty(type=bpy.types.Collection, name="Value")
-    ptr_image: PointerProperty(type=bpy.types.Image, name="Value")
-    ptr_world: PointerProperty(type=bpy.types.World, name="Value")
+    vec2_value: FloatVectorProperty(name="Value", description=_VALUE_TIP, size=2)
+    vec3_value: FloatVectorProperty(name="Value", description=_VALUE_TIP, size=3, subtype="XYZ")
+    euler_value: FloatVectorProperty(name="Value", description=_VALUE_TIP, size=3, subtype="EULER")
+    progress_factor: FloatProperty(name="Value", description=_VALUE_TIP, min=0.0, max=1.0, default=0.5, subtype="FACTOR")
+    ptr_object: PointerProperty(type=bpy.types.Object, name="Value", description=_VALUE_TIP)
+    ptr_material: PointerProperty(type=bpy.types.Material, name="Value", description=_VALUE_TIP)
+    ptr_collection: PointerProperty(type=bpy.types.Collection, name="Value", description=_VALUE_TIP)
+    ptr_image: PointerProperty(type=bpy.types.Image, name="Value", description=_VALUE_TIP)
+    ptr_world: PointerProperty(type=bpy.types.World, name="Value", description=_VALUE_TIP)
 
 
 class UIB_MockItem(bpy.types.PropertyGroup):
@@ -185,6 +187,8 @@ class UIB_Settings(bpy.types.PropertyGroup):
                             items=[(k, v[0], "") for k, v in el.PLACEMENTS.items()])
     category: StringProperty(name="Tab", description="Sidebar tab name", default="My Addon")
     export_format: EnumProperty(name="Format", items=_FORMATS, default="PYTHON")
+    preview_tooltips: BoolProperty(name="Show Tooltips", default=True,
+                                   description="Show each element's tooltip text under it in the mockup")
     map_on: BoolProperty(get=lambda self: True, set=lambda self, v: None)  # pressed-looking map cell
     map_off: BoolProperty(get=lambda self: False, set=lambda self, v: None)
 

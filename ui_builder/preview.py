@@ -1,5 +1,7 @@
 """Live mockup: draws the element tree with real Blender UI widgets."""
 
+import textwrap
+
 import bpy
 
 from . import elements as el
@@ -120,6 +122,12 @@ class Drawer:
                 _apply(target, attrs)
             for spec in el.leaf_specs(e):
                 self.call(target, e, spec)
+            if e.description and e.type != "BUTTON" and self.settings.preview_tooltips:
+                col = layout.column(align=True)
+                col.active = False
+                col.scale_y = 0.75
+                for line in textwrap.wrap(e.description, 44):
+                    col.label(text=line, icon="NONE")
 
     def _header(self, layout, e, checkbox=False):
         row = layout.row(align=True)
@@ -174,6 +182,7 @@ def draw_preview(layout, context):
         layout.label(text="Nothing to preview yet.", icon="INFO")
         layout.label(text="Add elements in the 'UI Builder' tab.")
         return
+    layout.prop(s, "preview_tooltips", icon="INFO")
     Drawer(s).nodes(layout, roots)
 
 
