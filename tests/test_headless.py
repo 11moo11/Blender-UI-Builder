@@ -94,7 +94,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 4, 2), updater.local_version()
+    assert updater.local_version() == (1, 4, 3), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -253,7 +253,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 4, 2), updater.local_version()
+    assert updater.local_version() == (1, 4, 3), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -498,6 +498,10 @@ def test_simplify():
             c2.prop(p, "mode", text="")
             c2.label(text="Other")
             c2.prop(p, "mode")  # keeps its own name: not merged
+            c3 = layout.column()
+            c3.label(text="Strength:"); c3.prop(p, "amount", text="", slider=True)
+            c3.label(text="Title:"); c3.prop(p, "name", text="")
+            c3.label(text="Plain"); c3.operator("object.select_all", text="Go")
             r1 = layout.row(align=True); r1.scale_x = 0.3; r1.label(text="Device:")
             r2 = layout.row(align=True); r2.scale_x = 0.7; r2.prop(p, "mode", text="")
 
@@ -512,19 +516,23 @@ def test_simplify():
         got = shape(item)
         print("  simplified:", got)
         kinds = [c.type for c in item.children]
-        assert kinds[:7] == ["ENUM", "LIST", "IMAGE_PREVIEW", "LABEL", "ROW", "LABEL", "FLOAT"], kinds
-        tail = item.children[7:]
-        # "Quilt:" label + empty-named Choice -> one Choice named Quilt with the label on the left
-        assert [c.type for c in tail] == ["COLUMN", "ENUM"], [c.type for c in tail]
-        col, row_enum = tail
-        assert [c.type for c in col.children] == ["ENUM", "LABEL", "ENUM"]
-        assert col.children[0].label == "Quilt" and col.children[0].fields["prop_split"] is True
-        assert col.children[2].label == "Mode" and "prop_split" not in col.children[2].fields
-        assert row_enum.label == "Device" and row_enum.fields["prop_split"] and "scale_x" not in row_enum.fields
+        assert kinds == ["ENUM", "LIST", "IMAGE_PREVIEW", "LABEL", "ROW", "FLOAT", "COLUMN", "SLIDER", "STRING",
+                         "LABEL", "BUTTON", "ENUM"], kinds
         row = item.children[4]
         assert [c.type for c in row.children] == ["LIST", "COLUMN"] and row.children[1].fields["align"] is True
-        assert item.children[5].fields["scale_x"] == 0.3
-        assert item.children[6].fields["enabled"] is False
+        # label + unnamed value control -> one control with the label on the left
+        dev = item.children[5]
+        assert dev.label == "Device" and dev.fields["prop_split"] and dev.fields["enabled"] is False
+        assert "scale_x" not in dev.fields
+        col = item.children[6]
+        assert [c.type for c in col.children] == ["ENUM", "LABEL", "ENUM"]
+        assert col.children[0].label == "Quilt" and col.children[0].fields["prop_split"] is True
+        assert col.children[2].label == "Mode" and "prop_split" not in col.children[2].fields  # own name kept
+        assert [(c.type, c.label) for c in item.children[7:11]] == [
+            ("SLIDER", "Strength"), ("STRING", "Title"), ("LABEL", "Plain"), ("BUTTON", "Go")]
+        assert all(c.fields.get("prop_split") for c in item.children[7:9])
+        last = item.children[11]
+        assert last.label == "Device" and last.fields["prop_split"] and "scale_x" not in last.fields
         enum = item.children[0]
         assert enum.fields["enum_items"] == "Alpha, Beta" or enum.fields["enum_items"], enum.fields
         assert item.children[1].label == "Objects"

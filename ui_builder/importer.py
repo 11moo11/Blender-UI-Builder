@@ -516,14 +516,18 @@ def _resolve(c, parent):
     return [c]
 
 
+_MERGE_TYPES = tuple(x for x in el.SPLIT_TYPES if x != "BOOL")  # icon-only toggles keep their own look
+
+
 def _merge_label_choice(items):
-    """A text label directly followed by an unlabelled Choice becomes one Choice with 'Label on the Left'."""
+    """A text label directly followed by an unnamed value control (Choice, slider, text field...)
+    becomes one control named after the label, with 'Label on the Left'."""
     out, i = [], 0
     while i < len(items):
         a = items[i]
         b = items[i + 1] if i + 1 < len(items) else None
         if (a.type == "LABEL" and a.label.strip() and not a.children and b is not None
-                and b.type == "ENUM" and not b.label.strip()):
+                and b.type in _MERGE_TYPES and not b.label.strip()):
             b.label = a.label.strip().rstrip(":").strip()
             b.fields["prop_split"] = True
             for k in ("scale_x", "scale_y"):  # widths only existed to line the two widgets up
