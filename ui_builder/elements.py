@@ -19,7 +19,7 @@ class Def:
     """Static description of one element type."""
 
     def __init__(self, id, label, category, icon, *, container=False, ident=True,
-                 icon_ok=True, desc=False, help=""):
+                 icon_ok=True, desc=False, help="", hidden=False):
         self.id = id
         self.label = label
         self.category = category
@@ -29,6 +29,7 @@ class Def:
         self.icon_ok = icon_ok  # user may pick an icon
         self.desc = desc  # has a tooltip/description
         self.help = help
+        self.hidden = hidden  # kept so old projects still load, but not offered in the Add / Replace menus
 
 
 _DEFS = (
@@ -47,10 +48,10 @@ _DEFS = (
         help="Splits the width by a factor between its children."),
     Def("GRID", "Grid", "LAYOUT", "MESH_GRID", container=True, ident=False, icon_ok=False,
         help="Flowing grid (layout.grid_flow)."),
-    Def("SEPARATOR", "Separator", "LAYOUT", "REMOVE", ident=False, icon_ok=False,
-        help="Empty gap or divider line."),
-    Def("SPACER", "Spacer", "LAYOUT", "DOT", ident=False, icon_ok=False,
-        help="Vertical gap of adjustable size."),
+    Def("SEPARATOR", "Separator / Spacer", "LAYOUT", "REMOVE", ident=False, icon_ok=False,
+        help="Divider line, or an empty gap of adjustable size (Style: Space)."),
+    Def("SPACER", "Spacer (legacy)", "LAYOUT", "DOT", ident=False, icon_ok=False, hidden=True,
+        help="Superseded by Separator, which has a size and a Space style."),
     # --- Text -------------------------------------------------------------
     Def("LABEL", "Label", "TEXT", "TEXT", ident=False, help="A line of text, optionally with an icon."),
     Def("TEXT_LINES", "Text Block", "TEXT", "ALIGN_LEFT", ident=False, icon_ok=False,
@@ -59,16 +60,17 @@ _DEFS = (
     Def("BOOL", "Checkbox", "PROPS", "CHECKBOX_HLT", desc=True, help="Boolean property."),
     Def("INT", "Integer", "PROPS", "MOD_ARRAY", desc=True, help="Integer field."),
     Def("FLOAT", "Float", "PROPS", "IPO_LINEAR", desc=True, help="Float field."),
-    Def("SLIDER", "Slider", "PROPS", "IPO_EASE_IN_OUT", desc=True, help="Float shown as a slider."),
-    Def("FACTOR", "Factor", "PROPS", "NODE_COMPOSITING", desc=True, help="0-1 factor (subtype FACTOR)."),
+    Def("SLIDER", "Slider", "PROPS", "IPO_EASE_IN_OUT", desc=True, help="Float shown as a slider (0-1 by default)."),
+    Def("FACTOR", "Factor (legacy)", "PROPS", "NODE_COMPOSITING", desc=True, hidden=True,
+        help="Draws exactly like Slider; use Slider instead."),
     Def("PERCENT", "Percentage", "PROPS", "MOD_OPACITY", desc=True, help="0-100 percentage."),
     Def("ANGLE", "Angle", "PROPS", "DRIVER_ROTATIONAL_DIFFERENCE", desc=True, help="Rotation value in degrees."),
     Def("DISTANCE", "Distance", "PROPS", "DRIVER_DISTANCE", desc=True, help="Length with scene units."),
     Def("STRING", "Text Field", "PROPS", "FONT_DATA", desc=True, help="String property."),
     Def("FILEPATH", "File Path", "PROPS", "FILE", desc=True, help="File picker."),
     Def("DIRPATH", "Folder Path", "PROPS", "FILE_FOLDER", desc=True, help="Folder picker."),
-    Def("ENUM", "Dropdown", "PROPS", "COLLAPSEMENU", desc=True,
-        help="Enum property: dropdown, expanded buttons or tabs."),
+    Def("ENUM", "Choice (Dropdown / Buttons)", "PROPS", "COLLAPSEMENU", desc=True,
+        help="Pick one value from a list: shown as a dropdown or as a row of buttons."),
     Def("COLOR", "Color", "PROPS", "COLOR", desc=True, help="RGB color."),
     Def("COLOR_ALPHA", "Color + Alpha", "PROPS", "IMAGE_RGB_ALPHA", desc=True, help="RGBA color."),
     Def("VEC2", "Vector 2D", "PROPS", "EMPTY_AXIS", desc=True, help="Two float fields."),
@@ -80,8 +82,8 @@ _DEFS = (
         help="String with a searchable list of Blender data (prop_search)."),
     # --- Actions ----------------------------------------------------------
     Def("BUTTON", "Button", "ACTIONS", "PLAY", desc=True, help="Operator button. Exports an operator stub."),
-    Def("MENU", "Dropdown Menu", "ACTIONS", "DOWNARROW_HLT", desc=True,
-        help="A menu button. Items come from the options list."),
+    Def("MENU", "Action Menu", "ACTIONS", "DOWNARROW_HLT", desc=True,
+        help="A button that opens a menu of actions (operators). Not a value picker: use Choice for that."),
     Def("POPOVER", "Popover", "ACTIONS", "FULLSCREEN_ENTER", container=True, desc=True,
         help="Button that opens a floating panel containing its children."),
     # --- Templates --------------------------------------------------------
@@ -99,7 +101,7 @@ DEFS = {d.id: d for d in _DEFS}
 
 
 def defs_in(category):
-    return [d for d in _DEFS if d.category == category]
+    return [d for d in _DEFS if d.category == category and not d.hidden]
 
 
 # Attribute on the element that holds the previewed/default value for each type.
@@ -297,8 +299,6 @@ def leaf_specs(e, export=False):
         kw["slider"] = True
         return [Spec("prop", value, kw)]
     if t == "ENUM":
-        if e.enum_style == "TABS":
-            return [Spec("prop_tabs_enum", value, {})]
         if e.enum_style == "EXPAND":
             kw["expand"] = True
         return [Spec("prop", value, kw)]

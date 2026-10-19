@@ -49,10 +49,10 @@ Limits: panels whose draw code needs context that isn't there (for example a sel
 
 ### Elements
 
-- **Layout:** Panel, Sub-panel, Collapsible Box, Row, Column, Box, Split, Grid, Separator, Spacer
+- **Layout:** Panel, Sub-panel, Collapsible Box, Row, Column, Box, Split, Grid, Separator / Spacer
 - **Text:** Label, Text Block
-- **Properties:** Checkbox / Toggle, Integer, Float, Slider, Factor, Percentage, Angle, Distance, Text, File path, Folder path, Dropdown / Expanded / Tabs, Color, Color + Alpha, Vector 2D/3D, Euler, Data-block pointer, Search field
-- **Buttons & Menus:** Button (operator), Dropdown Menu, Popover
+- **Properties:** Checkbox / Toggle, Integer, Float, Slider, Percentage, Angle, Distance, Text, File path, Folder path, Choice (dropdown or row of buttons), Color, Color + Alpha, Vector 2D/3D, Euler, Data-block pointer, Search field
+- **Buttons & Menus:** Button (operator), Action Menu, Popover
 - **Templates:** List (UIList), Data-block selector (`template_ID`), Color wheel, Preview image, Progress bar
 
 ### Export formats

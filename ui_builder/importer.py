@@ -149,7 +149,7 @@ def item_from_prop(data, name, text, icon, expand, slider, toggle, icon_only, in
             sub = rna.subtype
             v = float(cur) if cur is not None else 0.0
             if sub == "FACTOR":
-                return done("FACTOR", factor_value=v)
+                return done("SLIDER", slider_value=min(max(v, 0.0), 1.0))
             if sub == "PERCENTAGE":
                 return done("PERCENT", percent_value=v)
             if sub == "ANGLE":
@@ -177,7 +177,7 @@ def item_from_prop(data, name, text, icon, expand, slider, toggle, icon_only, in
             names = [n_ for _, n_ in pairs] or ["Option A", "Option B"]
             parsed = el.parse_enum_items(", ".join(names))
             fx = {"enum_items": ", ".join(names),
-                  "enum_style": "TABS" if force == "TABS" else "EXPAND" if expand else "DROPDOWN"}
+                  "enum_style": "EXPAND" if (expand or force == "TABS") else "DROPDOWN"}
             if isinstance(cur, str):
                 for (ident_, _), (new_id, _) in zip(pairs, parsed):
                     if ident_ == cur:

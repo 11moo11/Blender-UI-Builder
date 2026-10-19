@@ -101,7 +101,7 @@ class UIB_Element(bpy.types.PropertyGroup):
     bool_style: EnumProperty(name="Style", default="CHECKBOX", items=[
         ("CHECKBOX", "Checkbox", ""), ("TOGGLE", "Toggle Button", ""), ("ICON", "Icon Toggle", "Needs an icon")])
     enum_style: EnumProperty(name="Style", default="DROPDOWN", items=[
-        ("DROPDOWN", "Dropdown", ""), ("EXPAND", "Expanded Buttons", ""), ("TABS", "Tabs", "")])
+        ("DROPDOWN", "Dropdown", ""), ("EXPAND", "Row of Buttons", "")])
     enum_items: StringProperty(name="Options", description="Comma separated option names",
                                default="Option A, Option B, Option C")
     separator_style: EnumProperty(name="Style", default="AUTO", items=[
