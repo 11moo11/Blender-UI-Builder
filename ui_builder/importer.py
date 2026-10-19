@@ -516,7 +516,13 @@ def _resolve(c, parent):
     return [c]
 
 
-_MERGE_TYPES = tuple(x for x in el.SPLIT_TYPES if x != "BOOL")  # icon-only toggles keep their own look
+_MERGE_TYPES = el.SPLIT_TYPES  # (icon-only toggles are excluded in _mergeable)
+
+
+def _mergeable(b):
+    if b.type not in _MERGE_TYPES or b.label.strip():
+        return False
+    return not (b.type == "BOOL" and b.fields.get("bool_style") == "ICON")  # icon toggles keep their look
 
 
 def _merge_label_choice(items):
@@ -527,7 +533,7 @@ def _merge_label_choice(items):
         a = items[i]
         b = items[i + 1] if i + 1 < len(items) else None
         if (a.type == "LABEL" and a.label.strip() and not a.children and b is not None
-                and b.type in _MERGE_TYPES and not b.label.strip()):
+                and _mergeable(b)):
             b.label = a.label.strip().rstrip(":").strip()
             b.fields["prop_split"] = True
             for k in ("scale_x", "scale_y"):  # widths only existed to line the two widgets up

@@ -94,7 +94,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 4, 3), updater.local_version()
+    assert updater.local_version() == (1, 4, 4), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -253,7 +253,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 4, 3), updater.local_version()
+    assert updater.local_version() == (1, 4, 4), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -471,6 +471,7 @@ def test_simplify():
     class SP(bpy.types.PropertyGroup):
         mode: EnumProperty(name="Mode", items=dyn_items)
         amount: FloatProperty(name="Amount")
+        flag: bpy.props.BoolProperty(name="Flag")
 
     class SIM_PT_main(bpy.types.Panel):
         bl_label = "Sim"; bl_idname = "SIM_PT_main"
@@ -501,6 +502,8 @@ def test_simplify():
             c3 = layout.column()
             c3.label(text="Strength:"); c3.prop(p, "amount", text="", slider=True)
             c3.label(text="Title:"); c3.prop(p, "name", text="")
+            c3.label(text="Enable it:"); c3.prop(p, "flag", text="")
+            c3.label(text="Icon only"); c3.prop(p, "flag", text="", icon="PINNED", toggle=True)
             c3.label(text="Plain"); c3.operator("object.select_all", text="Go")
             r1 = layout.row(align=True); r1.scale_x = 0.3; r1.label(text="Device:")
             r2 = layout.row(align=True); r2.scale_x = 0.7; r2.prop(p, "mode", text="")
@@ -517,7 +520,7 @@ def test_simplify():
         print("  simplified:", got)
         kinds = [c.type for c in item.children]
         assert kinds == ["ENUM", "LIST", "IMAGE_PREVIEW", "LABEL", "ROW", "FLOAT", "COLUMN", "SLIDER", "STRING",
-                         "LABEL", "BUTTON", "ENUM"], kinds
+                         "BOOL", "LABEL", "BOOL", "LABEL", "BUTTON", "ENUM"], kinds
         row = item.children[4]
         assert [c.type for c in row.children] == ["LIST", "COLUMN"] and row.children[1].fields["align"] is True
         # label + unnamed value control -> one control with the label on the left
@@ -528,10 +531,13 @@ def test_simplify():
         assert [c.type for c in col.children] == ["ENUM", "LABEL", "ENUM"]
         assert col.children[0].label == "Quilt" and col.children[0].fields["prop_split"] is True
         assert col.children[2].label == "Mode" and "prop_split" not in col.children[2].fields  # own name kept
-        assert [(c.type, c.label) for c in item.children[7:11]] == [
-            ("SLIDER", "Strength"), ("STRING", "Title"), ("LABEL", "Plain"), ("BUTTON", "Go")]
-        assert all(c.fields.get("prop_split") for c in item.children[7:9])
-        last = item.children[11]
+        assert [(c.type, c.label) for c in item.children[7:14]] == [
+            ("SLIDER", "Strength"), ("STRING", "Title"), ("BOOL", "Enable it"), ("LABEL", "Icon only"),
+            ("BOOL", ""), ("LABEL", "Plain"), ("BUTTON", "Go")]
+        assert all(c.fields.get("prop_split") for c in item.children[7:10])
+        assert item.children[9].fields["bool_style"] == "CHECKBOX"
+        assert not item.children[11].fields.get("prop_split") and item.children[11].fields["bool_style"] == "ICON"
+        last = item.children[len(item.children) - 1]
         assert last.label == "Device" and last.fields["prop_split"] and "scale_x" not in last.fields
         enum = item.children[0]
         assert enum.fields["enum_items"] == "Alpha, Beta" or enum.fields["enum_items"], enum.fields
