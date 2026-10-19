@@ -281,6 +281,45 @@ class UIB_OT_indent(_ElementOp):
         return {"FINISHED"}
 
 
+class UIB_OT_replace(_ElementOp):
+    """Change the type of the selected elements (or the active one), keeping their children and settings"""
+    bl_idname = "ui_builder.replace"
+    bl_label = "Replace Selected"
+    bl_options = {"REGISTER", "UNDO"}
+
+    type: EnumProperty(items=[(d.id, d.label, d.help) for d in el._DEFS])
+
+    def execute(self, context):
+        s = settings(context)
+        new = el.DEFS[self.type]
+        lifted = 0
+        with operand(s):
+            elems = s.elements
+            # Every selected element, children of selected containers included only if selected themselves.
+            for i in [i for i, e in enumerate(elems) if e.selected]:
+                e = elems[i]
+                old = el.DEFS[e.type]
+                if e.type == self.type:
+                    continue
+                if not new.container:  # a leaf can't hold children: move them up one level
+                    end = tree.block_end(elems, i)
+                    for k in range(i + 1, end):
+                        elems[k].indent -= 1
+                        lifted += 1
+                if e.label in ("", old.label):
+                    e.label = new.label
+                e.type = self.type
+                if e.auto_ident or not e.ident:
+                    e.ident = el.slugify(e.label, el.slugify(self.type))
+                if self.type == "LIST":
+                    ensure_mock_items(context.scene)
+            tree.normalize(elems)
+        if lifted:
+            self.report({"INFO"}, "%d child element(s) were moved up a level" % lifted)
+        _redraw(context)
+        return {"FINISHED"}
+
+
 class UIB_OT_select(bpy.types.Operator):
     """Change which elements are ticked (ticked elements are moved / nested / deleted together)"""
     bl_idname = "ui_builder.select"
@@ -367,5 +406,5 @@ def _redraw(context):
             area.tag_redraw()
 
 
-classes = (UIB_OT_add, UIB_OT_remove, UIB_OT_duplicate, UIB_OT_move, UIB_OT_indent, UIB_OT_select,
+classes = (UIB_OT_add, UIB_OT_remove, UIB_OT_duplicate, UIB_OT_move, UIB_OT_indent, UIB_OT_replace, UIB_OT_select,
            UIB_OT_clear, UIB_OT_pick_icon)

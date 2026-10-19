@@ -94,7 +94,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 3, 0), updater.local_version()
+    assert updater.local_version() == (1, 3, 1), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -253,7 +253,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 3, 0), updater.local_version()
+    assert updater.local_version() == (1, 3, 1), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -590,6 +590,28 @@ def test_multiselect():
     bpy.ops.ui_builder.remove()
     assert order() == ["P", "C", "x", "y", "w"], order()
 
+    # replace: change a container's type but keep its children
+    build([("PANEL", "P", 0), ("ROW", "Row", 1), ("LABEL", "a", 2), ("LABEL", "b", 2), ("ROW", "Mine", 1)])
+    s.active_index = 1
+    bpy.ops.ui_builder.replace(type="COLUMN")
+    assert [(e.type, e.label, e.indent) for e in s.elements] == [
+        ("PANEL", "P", 0), ("COLUMN", "Column", 1), ("LABEL", "a", 2), ("LABEL", "b", 2), ("ROW", "Mine", 1)]
+    bpy.ops.ui_builder.replace(type="SPLIT")
+    assert s.elements[1].type == "SPLIT" and s.elements[2].indent == 2
+    sel("Split", "Mine")
+    bpy.ops.ui_builder.replace(type="BOX")  # several at once; custom names stay
+    assert [e.type for e in s.elements] == ["PANEL", "BOX", "LABEL", "LABEL", "BOX"]
+    assert s.elements[4].label == "Mine" and s.elements[1].label == "Box"
+    sel(); s.active_index = 1
+    bpy.ops.ui_builder.replace(type="BUTTON")  # leaf: children lifted one level
+    assert [(e.type, e.indent) for e in s.elements] == [("PANEL", 0), ("BUTTON", 1), ("LABEL", 1), ("LABEL", 1), ("BOX", 1)]
+    assert s.elements[1].ident == "button"
+    check_preview("replaced")
+    from ui_builder import ui as _ui
+    for m in [_ui.UIB_MT_replace] + [m for _, _, _, m in _ui._replace_menus]:
+        m.draw(types.SimpleNamespace(layout=FakeLayout([])), bpy.context)
+
+    build([("PANEL", "P", 0), ("ROW", "C", 1), ("LABEL", "x", 1), ("LABEL", "y", 1), ("LABEL", "w", 1)])
     # select menu actions
     bpy.ops.ui_builder.select(action="ALL")
     assert all(e.selected for e in s.elements)

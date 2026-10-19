@@ -23,22 +23,23 @@ class UIB_UL_elements(bpy.types.UIList):
             sub.label(text=d.label)
 
 
-def _add_menu(category, title, icon):
+def _add_menu(category, title, icon, operator="ui_builder.add", prefix="add"):
     ns = {"bl_label": title}
 
     def draw(self, context):
         for d in el.defs_in(category):
-            op = self.layout.operator("ui_builder.add", text=d.label, icon=d.icon)
+            op = self.layout.operator(operator, text=d.label, icon=d.icon)
             op.type = d.id
-        if category == "LAYOUT":
+        if category == "LAYOUT" and operator == "ui_builder.add":
             op = self.layout.operator("ui_builder.add", text="Sub-panel", icon="WINDOW")
             op.type = "SUBPANEL"
 
     ns["draw"] = draw
-    return type("UIB_MT_add_" + category.lower(), (bpy.types.Menu,), ns)
+    return type("UIB_MT_%s_%s" % (prefix, category.lower()), (bpy.types.Menu,), ns)
 
 
 _add_menus = [(c, t, i, _add_menu(c, t, i)) for c, t, i in el.CATEGORIES]
+_replace_menus = [(c, t, i, _add_menu(c, t, i, "ui_builder.replace", "replace")) for c, t, i in el.CATEGORIES]
 
 
 class UIB_MT_add(bpy.types.Menu):
@@ -46,6 +47,14 @@ class UIB_MT_add(bpy.types.Menu):
 
     def draw(self, context):
         for category, title, icon, menu in _add_menus:
+            self.layout.menu(menu.__name__, text=title, icon=icon)
+
+
+class UIB_MT_replace(bpy.types.Menu):
+    bl_label = "Replace Selected"
+
+    def draw(self, context):
+        for category, title, icon, menu in _replace_menus:
             self.layout.menu(menu.__name__, text=title, icon=icon)
 
 
@@ -107,9 +116,12 @@ class UIB_PT_main(bpy.types.Panel):
         col.separator()
         col.operator("ui_builder.indent", icon="FORWARD", text="").direction = "IN"
         col.operator("ui_builder.indent", icon="BACK", text="").direction = "OUT"
-        big = layout.row()
+        big = layout.row(align=True)
         big.scale_y = 2.0
         big.menu("UIB_MT_add", text="Add Element", icon="ADD")
+        rep = big.row(align=True)
+        rep.enabled = len(s.elements) > 0
+        rep.menu("UIB_MT_replace", text="Replace Selected", icon="FILE_REFRESH")
         if not len(s.elements):
             box = layout.box()
             box.label(text="Start with: Add Element > Layout > Panel", icon="INFO")
@@ -358,5 +370,6 @@ class UIB_PT_update(bpy.types.Panel):
             preferences.draw_update_box(self.layout, prefs, compact=True)
 
 
-classes = (UIB_UL_elements, *[m for _, _, _, m in _add_menus], UIB_MT_add, UIB_MT_select, UIB_MT_project,
+classes = (UIB_UL_elements, *[m for _, _, _, m in _add_menus], *[m for _, _, _, m in _replace_menus],
+           UIB_MT_add, UIB_MT_replace, UIB_MT_select, UIB_MT_project,
            UIB_PT_main, UIB_PT_element, UIB_PT_location, UIB_PT_export, UIB_PT_import, UIB_PT_update)
