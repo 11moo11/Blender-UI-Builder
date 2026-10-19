@@ -254,8 +254,9 @@ SPLIT_TYPES = ("BOOL", "INT", "FLOAT", "SLIDER", "FACTOR", "PERCENT", "ANGLE", "
 
 
 def wrapper_method(e):
-    """Layout used to wrap a single control that needs layout attributes."""
-    return "column" if e.prop_split else "row"
+    """Layout used to wrap a single control that needs layout attributes. Always a row: Blender only
+    honours `alignment` on rows (a column wrapper silently ignored Alignment for split controls)."""
+    return "row"
 
 
 def layout_attrs(e, container):

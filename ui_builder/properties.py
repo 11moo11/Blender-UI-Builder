@@ -88,7 +88,9 @@ class UIB_Element(bpy.types.PropertyGroup):
     scale_x: FloatProperty(name="Scale X", default=1.0, min=0.0, soft_max=3.0)
     scale_y: FloatProperty(name="Scale Y", default=1.0, min=0.0, soft_max=3.0)
     emboss: EnumProperty(name="Emboss", items=_EMBOSS, default="NORMAL")
-    alignment: EnumProperty(name="Alignment", items=_ALIGNMENT, default="EXPAND")
+    alignment: EnumProperty(name="Alignment", items=_ALIGNMENT, default="EXPAND",
+                            description="Expand fills the width. Left / Center / Right pack the control at its "
+                                        "natural size and align it (layout.alignment)")
     align: BoolProperty(name="Align", description="Join the children without gaps", default=False)
     prop_split: BoolProperty(name="Property Split",
                              description="Form layout (use_property_split): the name is shown on the left and "

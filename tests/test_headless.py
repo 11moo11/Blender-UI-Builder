@@ -94,7 +94,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 4, 4), updater.local_version()
+    assert updater.local_version() == (1, 4, 5), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -253,7 +253,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 4, 4), updater.local_version()
+    assert updater.local_version() == (1, 4, 5), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -761,10 +761,16 @@ def test_branches():
     s.elements[0].prop_split = True
     log = []
     Drawer(s).nodes(FakeLayout(log), tree.build(s.elements))
-    assert [x[0] for x in log][:2] == ["column", "set"], log
+    assert [x[0] for x in log][:2] == ["row", "set"], log
+    s.elements[0].alignment = "RIGHT"
+    log = []
+    Drawer(s).nodes(FakeLayout(log), tree.build(s.elements))
+    assert ("set", "alignment", "RIGHT") in log, log
+    assert "alignment = \"RIGHT\"" in export.Exporter(s).python()
+    s.elements[0].alignment = "EXPAND"
     assert ("set", "use_property_split", True) in log, log
     assert "use_property_split = True" in export.Exporter(s).python()
-    assert ".column(align=True)" in export.Exporter(s).python()
+    assert ".row(align=True)" in export.Exporter(s).python()
 
     # merged Color element
     s.elements.clear()
