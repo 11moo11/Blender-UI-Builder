@@ -649,6 +649,13 @@ def placement_fields(cls, project):
     return fields
 
 
+def fold_all(s):
+    """Roll up every element that has children, so an imported project opens as a tidy outline."""
+    elems = s.elements
+    for i, e in enumerate(elems):
+        e.fold = i + 1 < len(elems) and elems[i + 1].indent > e.indent
+
+
 def commit(s, items, new_element, normalize):
     """Append Item trees to the builder's element list."""
     def add(item, depth):
@@ -671,4 +678,5 @@ def commit(s, items, new_element, normalize):
             add(it, 0)
     normalize(s.elements)
     branches.sync_all(s)
+    fold_all(s)
 

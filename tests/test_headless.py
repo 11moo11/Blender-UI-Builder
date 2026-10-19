@@ -94,7 +94,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 4, 6), updater.local_version()
+    assert updater.local_version() == (1, 4, 7), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -253,7 +253,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 4, 6), updater.local_version()
+    assert updater.local_version() == (1, 4, 7), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -334,6 +334,9 @@ def test_import():
         s.elements.clear()
         from ui_builder.operators import new_element
         importer.commit(s, [main], new_element, tree.normalize)
+        for i, e in enumerate(s.elements):  # every element with children is rolled up after an import
+            has_kids = i + 1 < len(s.elements) and s.elements[i + 1].indent > e.indent
+            assert e.fold == has_kids, (i, e.type, e.fold)
         got = [(e.type, e.indent, e.label, e.ident) for e in s.elements]
         for g in got:
             print("  imported", g)
@@ -771,6 +774,24 @@ def test_branches():
     assert ("set", "use_property_split", True) in log, log
     assert "use_property_split = True" in export.Exporter(s).python()
     assert ".row(align=True)" in export.Exporter(s).python()
+
+    # new elements go directly below the selection
+    s.elements.clear()
+    bpy.ops.ui_builder.add(type="PANEL")
+    bpy.ops.ui_builder.add(type="ROW")           # P > R
+    bpy.ops.ui_builder.add(type="LABEL")         # P > R > L1 (below the row, as its first child)
+    s.elements[2].label = "L1"
+    s.active_index = 1
+    bpy.ops.ui_builder.add(type="BUTTON")        # directly below the row => first child, before L1
+    assert [(e.label, e.indent) for e in s.elements][1:] == [("Row", 1), ("Button", 2), ("L1", 2)], rows()
+    s.elements[1].fold = True
+    s.active_index = 1
+    bpy.ops.ui_builder.add(type="LABEL")         # folded row: new element lands after the whole row
+    assert [(e.type, e.indent) for e in s.elements] == [("PANEL", 0), ("ROW", 1), ("BUTTON", 2), ("LABEL", 2),
+                                                         ("LABEL", 1)], rows()
+    s.active_index = 2
+    bpy.ops.ui_builder.add(type="STRING")        # leaf: right below it, same level
+    assert s.elements[3].type == "STRING" and s.elements[3].indent == 2
 
     # merged Color element
     s.elements.clear()

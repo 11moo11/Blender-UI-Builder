@@ -55,7 +55,9 @@ def _insert_position(s, type_id, nest):
     if active.type == "ENUM":  # a Choice's contents go under its options: add as a sibling instead
         return tree.block_end(elems, i), active.indent
     if el.DEFS[active.type].container:
-        return tree.block_end(elems, i), active.indent + 1
+        if active.fold:  # its contents are hidden, so "below" means after the whole folded block
+            return tree.block_end(elems, i), active.indent
+        return i + 1, active.indent + 1  # directly below the container row: its first child
     return i + 1, active.indent
 
 
