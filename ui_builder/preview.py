@@ -6,7 +6,7 @@ import bpy
 
 from . import elements as el
 from . import tree
-from .icons import valid_icon
+from .icons import icon_id, valid_icon
 
 
 class UIB_OT_mock_action(bpy.types.Operator):
@@ -71,6 +71,8 @@ class Drawer:
             return UIB_OT_mock_action.bl_idname
         if name == "uilist":
             return UIB_UL_mock.__name__
+        if name == "preview_icon":
+            return icon_id("IMAGE_DATA")
         if name == "value":
             return getattr(e, el.value_attr(e))
         raise KeyError(name)

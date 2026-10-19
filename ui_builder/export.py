@@ -194,6 +194,8 @@ class Exporter:
             return self.cls("MT", n)
         if name == "popover":
             return self.cls("PT", n)
+        if name == "preview_icon":
+            return Raw("0")
         if name == "value":
             return Raw("props.%s" % n.name)
         raise KeyError(name)
@@ -201,7 +203,10 @@ class Exporter:
     def call_line(self, target, n, spec):
         args, kwargs = self._resolve(n, spec)
         parts = [_arg(a) for a in args] + ["%s=%s" % (k, _arg(v)) for k, v in kwargs.items()]
-        return "%s.%s(%s)" % (target, spec.method, ", ".join(parts))
+        line = "%s.%s(%s)" % (target, spec.method, ", ".join(parts))
+        if spec.method == "template_icon":
+            line += "  # TODO: icon_value = the icon id of your preview image"
+        return line
 
     def gen_children(self, nodes, layout, ind, out):
         for n in nodes:

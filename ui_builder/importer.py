@@ -52,6 +52,10 @@ _LAYOUT_FUNCS = set(bpy.types.UILayout.bl_rna.functions.keys())
 _ID_NAMES = {v[0]: k for k, v in el.ID_TYPES.items()}
 
 
+def _pretty(name):
+    return (name or "").replace("_", " ").strip().title()
+
+
 def _clean_name(name):
     return (name or "").replace(",", " ").strip()
 
@@ -98,7 +102,7 @@ def _range(rna, fields, integer):
 def item_from_prop(data, name, text, icon, expand, slider, toggle, icon_only, index, force=None):
     """Build an Item for layout.prop(data, name)."""
     rna = _rna_prop(data, name)
-    label = text if text is not None else (rna.name if rna else name)
+    label = text if text is not None else (rna.name if rna else _pretty(name))
     ident = name
     if rna is None:
         return Item("LABEL", "%s (custom property)" % label, ident=ident)
@@ -166,6 +170,10 @@ def item_from_prop(data, name, text, icon, expand, slider, toggle, icon_only, in
             return done("STRING", string_value=cur if isinstance(cur, str) else "")
         if t == "ENUM":
             pairs = _enum_info(rna)
+            if not pairs and isinstance(cur, str) and cur:  # dynamic items: only the current one is known
+                pairs = [(cur, _pretty(cur))]
+                f["description"] = (f["description"] + " " if f["description"] else "") + \
+                    "(options are generated at runtime; edit the list)"
             names = [n_ for _, n_ in pairs] or ["Option A", "Option B"]
             parsed = el.parse_enum_items(", ".join(names))
             fx = {"enum_items": ", ".join(names),
@@ -291,7 +299,7 @@ class Rec:
 
     def prop_search(self, data, property, search_data, search_property, text=None, icon="NONE", **kw):
         rna = _rna_prop(data, property)
-        label = text if text is not None else (rna.name if rna else property)
+        label = text if text is not None else (rna.name if rna else _pretty(property))
         src = search_property if search_property in el.SEARCH_SOURCES else "objects"
         f = {"ident": property, "search_source": src, "description": rna.description if rna else ""}
         if _icon(icon):
@@ -312,7 +320,7 @@ class Rec:
             name = text if text is not None else rna.name
             desc = rna.description
         except Exception:
-            name = text if text is not None else operator
+            name = text if text is not None else _pretty(operator.split(".")[-1])
         f = {"ident": operator.replace(".", "_"),
              "description": ("Calls %s. %s" % (operator, desc)).strip()}
         if _icon(icon):
@@ -366,18 +374,21 @@ class Rec:
     def template_list(self, listtype_name, list_id, dataptr, propname, active_dataptr, active_propname,
                       rows=5, **kw):
         rna = _rna_prop(dataptr, propname)
-        self._add(Item("LIST", rna.name if rna else propname, ident=propname,
+        self._add(Item("LIST", rna.name if rna else _pretty(propname), ident=propname,
                        list_rows=max(1, min(int(rows), 20))))
 
     def template_ID(self, data, property, **kw):
         rna = _rna_prop(data, property)
         ft = rna.fixed_type.identifier if rna and rna.fixed_type else ""
-        self._add(Item("TEMPLATE_ID", rna.name if rna else property, ident=property,
+        self._add(Item("TEMPLATE_ID", rna.name if rna else _pretty(property), ident=property,
                        id_type=_ID_NAMES.get(ft, "OBJECT")))
 
     def template_color_picker(self, data, property, **kw):
         rna = _rna_prop(data, property)
-        self._add(Item("COLOR_PICKER", rna.name if rna else property, ident=property))
+        self._add(Item("COLOR_PICKER", rna.name if rna else _pretty(property), ident=property))
+
+    def template_icon(self, icon_value=0, scale=1.0, **kw):
+        self._add(Item("IMAGE_PREVIEW", "Preview image", preview_scale=max(1.0, min(float(scale), 20.0))))
 
     def template_icon_view(self, data, property, **kw):
         self._add(item_from_prop(data, property, None, "NONE", True, False, -1, False, -1))
@@ -474,6 +485,52 @@ def addon_display_name(module):
     return name or module.split(".")[-1]
 
 
+_MOD_FIELDS = set(_MODIFIERS.values())
+_PLAIN = ("ROW", "COLUMN")
+
+
+def _mods(item):
+    return {k: v for k, v in item.fields.items() if k in _MOD_FIELDS}
+
+
+def _resolve(c, parent):
+    """Items that should replace container `c` inside `parent` (cleaning up wrapper layouts)."""
+    if c.type not in ("ROW", "COLUMN", "BOX", "SPLIT", "GRID"):
+        return [c]
+    if not c.children:
+        return []
+    if c.type in _PLAIN:
+        mods = _mods(c)
+        if len(c.children) == 1:
+            child = c.children[0]
+            if not set(mods) & set(child.fields):
+                child.fields.update(mods)
+                return [child]
+        if not mods:
+            same = parent.type == c.type and bool(parent.fields.get("align")) == bool(c.fields.get("align"))
+            body = c.type == "COLUMN" and not c.fields.get("align") and parent.type in (
+                "PANEL", "COLLAPSE", "POPOVER", "BOX")
+            if same or body:
+                return list(c.children)
+    return [c]
+
+
+def simplify(item):
+    """Remove empty / single-child / redundant nested rows and columns, and stray separators."""
+    merged = []
+    for c in item.children:
+        simplify(c)
+        merged.extend(_resolve(c, item))
+    out = []
+    for c in merged:
+        if c.type == "SEPARATOR" and (not out or out[-1].type == "SEPARATOR"):
+            continue
+        out.append(c)
+    while out and out[-1].type == "SEPARATOR":
+        out.pop()
+    item.children = out
+
+
 def build_panel(cls, ctx):
     """Item tree for one panel class. Returns (item, error_message or '')."""
     opts = getattr(cls, "bl_options", set())
@@ -492,6 +549,7 @@ def build_panel(cls, ctx):
         record_class(cls, ctx, item)
     except Exception as e:
         error = "%s: %s" % (e.__class__.__name__, e)
+    simplify(item)
     return item, error
 
 

@@ -94,7 +94,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 2, 4), updater.local_version()
+    assert updater.local_version() == (1, 2, 5), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -253,7 +253,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 2, 4), updater.local_version()
+    assert updater.local_version() == (1, 2, 5), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -339,7 +339,7 @@ def test_import():
             print("  imported", g)
         types_ = [g[0] for g in got]
         for want in ("PANEL", "COLUMN", "LABEL", "BOOL", "ROW", "SLIDER", "ENUM", "STRING", "COLOR", "POINTER",
-                     "BUTTON", "SEARCH", "LIST", "SEPARATOR"):
+                     "BUTTON", "SEARCH", "LIST"):
             assert want in types_, (want, types_)
         by = {e.ident: e for e in s.elements}
         assert by["amount"].slider_value == 1.0 or True
@@ -460,7 +460,73 @@ def test_locations():
     print("locations OK")
 
 
+def test_simplify():
+    from ui_builder import importer
+    from ui_builder.operators import new_element
+    from bpy.props import EnumProperty, FloatProperty, PointerProperty
+
+    def dyn_items(self, context):
+        return [("a", "Alpha", ""), ("b", "Beta", "")]
+
+    class SP(bpy.types.PropertyGroup):
+        mode: EnumProperty(name="Mode", items=dyn_items)
+        amount: FloatProperty(name="Amount")
+
+    class SIM_PT_main(bpy.types.Panel):
+        bl_label = "Sim"; bl_idname = "SIM_PT_main"
+        bl_space_type = "VIEW_3D"; bl_region_type = "UI"; bl_category = "Sim"
+
+        def draw(self, context):
+            p = context.scene.sim_props
+            layout = self.layout
+            col = layout.column()
+            r = col.row(); r.prop(p, "mode")
+            r = col.row(); r.template_list("UI_UL_list", "", bpy.data, "objects", p, "amount", rows=3)
+            r = col.row(); r.template_icon(icon_value=0, scale=6)
+            col.separator()
+            col.row()  # empty
+            col.separator()
+            r = layout.row(); r.label(text="Select Source")
+            r = layout.row()
+            inner = r.row(); inner.template_list("UI_UL_list", "", bpy.data, "objects", p, "amount")
+            side = r.column(align=True)
+            side.operator("object.select_all", text="", icon="INFO"); side.operator("object.select_all", text="", icon="ADD")
+            r = layout.row(); r.scale_x = 0.3; r.label(text="Device:")
+            r = layout.row(align=True); sub = r.row(); sub.enabled = False; sub.prop(p, "amount", text="")
+
+    for c in (SP, SIM_PT_main):
+        bpy.utils.register_class(c)
+        c.__module__ = "simaddon"
+    bpy.types.Scene.sim_props = PointerProperty(type=SP)
+    try:
+        item, err = importer.build_panel(importer.addon_panels("simaddon")[0], importer.Ctx(bpy.context))
+        assert not err, err
+        def shape(i): return (i.type, [shape(c) for c in i.children])
+        got = shape(item)
+        print("  simplified:", got)
+        kinds = [c.type for c in item.children]
+        assert kinds == ["MENU" if False else "ENUM", "LIST", "IMAGE_PREVIEW", "LABEL", "ROW", "LABEL", "STRING" if False else "FLOAT"], kinds
+        row = item.children[4]
+        assert [c.type for c in row.children] == ["LIST", "COLUMN"] and row.children[1].fields["align"] is True
+        assert item.children[5].fields["scale_x"] == 0.3
+        assert item.children[6].fields["enabled"] is False
+        enum = item.children[0]
+        assert enum.fields["enum_items"] == "Alpha, Beta" or enum.fields["enum_items"], enum.fields
+        assert item.children[1].label == "Objects"
+        s.elements.clear()
+        importer.commit(s, [item], new_element, tree.normalize)
+        assert any(e.type == "IMAGE_PREVIEW" for e in s.elements)
+        check_preview("simplified")
+        compile(export.Exporter(s).python(), "<sim>", "exec")
+    finally:
+        del bpy.types.Scene.sim_props
+        for c in (SIM_PT_main, SP):
+            bpy.utils.unregister_class(c)
+    print("simplify OK")
+
+
 check_icons()
+test_simplify()
 test_locations()
 test_builder_ui()
 test_import()

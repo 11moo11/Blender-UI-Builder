@@ -90,6 +90,8 @@ _DEFS = (
         help="template_ID selector with new/browse buttons."),
     Def("COLOR_PICKER", "Color Wheel", "TEMPLATES", "EYEDROPPER", desc=True,
         help="Large color wheel (template_color_picker)."),
+    Def("IMAGE_PREVIEW", "Preview Image", "TEMPLATES", "IMAGE_DATA", ident=False, icon_ok=False,
+        help="Large icon / thumbnail (template_icon). Supply the icon id in code."),
     Def("PROGRESS", "Progress Bar", "TEMPLATES", "TIME", desc=True, help="Progress bar (layout.progress)."),
 )
 
@@ -321,6 +323,8 @@ def leaf_specs(e, export=False):
         if open_:
             tkw["open"] = open_
         return [Spec("template_ID", value, tkw)]
+    if t == "IMAGE_PREVIEW":
+        return [Spec("template_icon", [], {"icon_value": Sym("preview_icon"), "scale": round(e.preview_scale, 2)})]
     if t == "COLOR_PICKER":
         return [Spec("template_color_picker", value, {"value_slider": True})]
     if t == "PROGRESS":

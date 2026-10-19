@@ -107,6 +107,7 @@ class UIB_Element(bpy.types.PropertyGroup):
     id_type: EnumProperty(name="Data Type", items=_ID_TYPES, default="OBJECT")
     search_source: EnumProperty(name="Search In", default="objects",
                                 items=[(s, s.replace("_", " ").title(), "") for s in el.SEARCH_SOURCES])
+    preview_scale: FloatProperty(name="Scale", default=6.0, min=1.0, max=20.0)
     list_rows: IntProperty(name="Rows", default=4, min=1, max=20)
     progress_type: EnumProperty(name="Type", default="BAR", items=[("BAR", "Bar", ""), ("RING", "Ring", "")])
     use_range: BoolProperty(name="Limit Range", description="Export min / max for this property", default=False)

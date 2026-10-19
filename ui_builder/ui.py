@@ -186,6 +186,8 @@ def draw_element(layout, e):
         col.prop(e, "id_type")
     elif t == "LIST":
         col.prop(e, "list_rows")
+    elif t == "IMAGE_PREVIEW":
+        col.prop(e, "preview_scale")
     elif t == "BUTTON":
         sub = col.box()
         sub.label(text="Exports an operator stub", icon="INFO")

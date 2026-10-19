@@ -35,3 +35,11 @@ def icon_items(self=None, context=None):
                 continue
             _items.append((i.identifier, i.name, "", i.value, len(_items)))
     return _items
+
+
+def icon_id(name):
+    """Numeric icon id for use with icon_value=."""
+    for i in _enum_params():
+        if i.identifier == name:
+            return i.value
+    return 0
