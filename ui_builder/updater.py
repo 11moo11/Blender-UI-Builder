@@ -257,18 +257,10 @@ def install_async(repo, branch, token=""):
     def job():
         try:
             install_from_github(repo, STATE.branch or branch, token)
-            STATE.set(State.INSTALLED, "Updated. Reload scripts or restart Blender to finish.")
+            STATE.set(State.INSTALLED, "Updated. Restart Blender to finish.")
         except urllib.error.HTTPError as e:
             STATE.set(State.ERROR, "GitHub returned %s while downloading. Check the repository, branch and token." % e.code)
         except Exception as e:
             STATE.set(State.ERROR, "Update failed: %s" % e)
 
     _start(job)
-
-
-def reload_scripts():
-    """Reload all addons (picks up the freshly written files)."""
-    def run():
-        bpy.ops.script.reload()
-        return None
-    bpy.app.timers.register(run, first_interval=0.2)

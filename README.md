@@ -64,7 +64,7 @@ Names become identifiers (`Render Still` → `render_still`); duplicates are num
 The addon updates itself from this repository:
 
 - On startup (and via **Preferences > Add-ons > UI Builder** or the *Updates* panel) it reads the version in `ui_builder/__init__.py` on the configured branch.
-- If the remote version is newer, an **Update available** banner appears. **Update Now** downloads the branch archive, replaces the addon files (rolling back on any error) and reloads scripts.
+- If the remote version is newer, an **Update available** banner appears. **Update Now** downloads the branch archive, replaces the addon files (rolling back on any error) and offers a **Restart Blender** button (it saves your file first, then reopens it). Scripts are deliberately not hot-reloaded, because that can crash Blender.
 - **Private repository?** GitHub answers 404 to anonymous requests for private repos. Paste a read-only GitHub access token into *Access Token* in the addon preferences.
 - If the configured branch doesn't exist, the repository's default branch is used. **Update Now** is only enabled when a newer version was found.
 - Repository and branch are configurable in the addon preferences (default `11moo11/Blender-UI-Builder`, branch `main`). Startup checks can be turned off. Nothing is sent except the request itself, and nothing happens without Blender's *Allow Online Access* enabled (4.2+).

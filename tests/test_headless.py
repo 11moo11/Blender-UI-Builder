@@ -94,7 +94,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 2, 3), updater.local_version()
+    assert updater.local_version() == (1, 2, 4), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -253,7 +253,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 2, 3), updater.local_version()
+    assert updater.local_version() == (1, 2, 4), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
