@@ -60,8 +60,15 @@ STATE = State()
 
 
 def local_version():
-    mod = sys.modules.get(__package__)
-    return tuple(getattr(mod, "bl_info", {}).get("version", (0, 0, 0)))
+    """Installed version, read from this addon's own __init__.py."""
+    try:
+        with open(os.path.join(ADDON_DIR, "__init__.py"), encoding="utf-8") as f:
+            m = _VERSION_RE.search(f.read())
+        if m:
+            return tuple(int(x) for x in m.groups())
+    except OSError:
+        pass
+    return (0, 0, 0)
 
 
 def fmt_version(v):

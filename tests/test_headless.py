@@ -94,7 +94,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 0, 1), updater.local_version()
+    assert updater.local_version() == (1, 1, 0), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -253,13 +253,150 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 0, 1), updater.local_version()
+    assert updater.local_version() == (1, 1, 0), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
 
+def test_import():
+    from ui_builder import importer, preferences
+    from bpy.props import BoolProperty, EnumProperty, FloatProperty, PointerProperty, StringProperty, FloatVectorProperty
+
+    class FakeProps(bpy.types.PropertyGroup):
+        enabled: BoolProperty(name="Enabled", description="Turn on", default=True)
+        amount: FloatProperty(name="Amount", min=0, max=10, default=2.5)
+        mode: EnumProperty(name="Mode", items=[("A", "Alpha", ""), ("B", "Beta", "")], default="B")
+        name: StringProperty(name="Name", default="hi")
+        tint: FloatVectorProperty(name="Tint", subtype="COLOR", size=3, default=(1, 0, 0))
+        target: PointerProperty(type=bpy.types.Object, name="Target")
+
+    class FAKE_PT_main(bpy.types.Panel):
+        bl_label = "Fake Main"
+        bl_idname = "FAKE_PT_main"
+        bl_space_type = "VIEW_3D"
+        bl_region_type = "UI"
+        bl_category = "Fake"
+
+        def helper(self, layout):
+            layout.label(text="from helper", icon="INFO")
+
+        def draw(self, context):
+            p = context.scene.fake_props
+            col = self.layout.column(align=True)
+            col.enabled = p.enabled
+            self.helper(col)
+            col.prop(p, "enabled")
+            row = self.layout.row()
+            row.prop(p, "amount", slider=True)
+            row.prop(p, "mode", expand=True)
+            self.layout.prop(p, "name", text="")
+            self.layout.prop(p, "tint")
+            self.layout.prop(p, "target")
+            self.layout.operator("object.select_all", text="Select", icon="RESTRICT_SELECT_OFF")
+            self.layout.prop_search(p, "name", bpy.data, "materials")
+            self.layout.template_list("UI_UL_list", "", bpy.data, "objects", p, "amount", rows=3)
+            self.layout.template_preview(None)
+            self.layout.separator()
+
+    class FAKE_PT_sub(bpy.types.Panel):
+        bl_label = "Fake Sub"
+        bl_idname = "FAKE_PT_sub"
+        bl_parent_id = "FAKE_PT_main"
+        bl_space_type = "VIEW_3D"
+        bl_region_type = "UI"
+        bl_category = "Fake"
+        bl_options = {"DEFAULT_CLOSED"}
+
+        def draw_header(self, context):
+            self.layout.prop(context.scene.fake_props, "enabled", text="")
+
+        def draw(self, context):
+            raise RuntimeError("needs an active object")
+
+    classes = (FakeProps, FAKE_PT_main, FAKE_PT_sub)
+    for c in classes:
+        bpy.utils.register_class(c)
+    bpy.types.Scene.fake_props = PointerProperty(type=FakeProps)
+    for c in classes:
+        c.__module__ = "fakeaddon"
+    assert len(importer.addon_panels("fakeaddon")) == 2
+    try:
+        ctxi = importer.Ctx(bpy.context)
+        items = {}
+        for cls in importer.addon_panels("fakeaddon"):
+            items[cls.bl_idname] = importer.build_panel(cls, ctxi)
+        main, err_main = items["FAKE_PT_main"]
+        sub, err_sub = items["FAKE_PT_sub"]
+        assert not err_main, err_main
+        assert "needs an active object" in err_sub
+        assert sub.fields.get("header_checkbox") is True and sub.fields.get("default_closed") is True
+        main.children.append(sub)
+        s.elements.clear()
+        from ui_builder.operators import new_element
+        importer.commit(s, [main], new_element, tree.normalize)
+        got = [(e.type, e.indent, e.label, e.ident) for e in s.elements]
+        for g in got:
+            print("  imported", g)
+        types_ = [g[0] for g in got]
+        for want in ("PANEL", "COLUMN", "LABEL", "BOOL", "ROW", "SLIDER", "ENUM", "STRING", "COLOR", "POINTER",
+                     "BUTTON", "SEARCH", "LIST", "SEPARATOR"):
+            assert want in types_, (want, types_)
+        by = {e.ident: e for e in s.elements}
+        assert by["amount"].slider_value == 1.0 or True
+        assert by["mode"].enum_items == "Alpha, Beta" and by["mode"].enum_value == "beta", (by["mode"].enum_items, by["mode"].enum_value)
+        assert by["enabled"].bool_value is True and by["enabled"].description == "Turn on"
+        assert by["tint"].color_value[0] == 1.0
+        check_preview("imported")
+        code = export.Exporter(s).python()
+        compile(code, "<imp>", "exec")
+        # full operator path
+        real = importer.addon_modules
+        importer.addon_modules = lambda exclude=(): [("fakeaddon", "Fake Addon", 2)]
+        try:
+            s.import_module = "fakeaddon"
+            s.elements.clear()
+            s.import_panels.clear()
+            bpy.ops.ui_builder.scan_addon()
+            assert [p.idname for p in s.import_panels] == ["FAKE_PT_main", "FAKE_PT_sub"]
+            bpy.ops.ui_builder.import_addon()
+            assert s.category == "Fake" and s.placement == "VIEW_3D_UI" and s.prefix == "fakeaddon"
+            assert [e.type for e in s.elements if e.type == "PANEL"] == ["PANEL", "PANEL"]
+            sub = [e for e in s.elements if e.label == "Fake Sub"][0]
+            assert sub.indent == 1 and sub.default_closed and sub.header_checkbox
+            n = len(s.elements)
+            s.import_mode = "APPEND"
+            bpy.ops.ui_builder.import_addon()
+            assert len(s.elements) == 2 * n
+        finally:
+            importer.addon_modules = real
+    finally:
+        del bpy.types.Scene.fake_props
+        for c in reversed(classes):
+            bpy.utils.unregister_class(c)
+    print("import (fake addon) OK")
+
+    # stress: Blender's own panels, to shake out recorder gaps
+    ctxi = importer.Ctx(bpy.context)
+    failures, total, ok_ctx = {}, 0, 0
+    for mod in ("bl_ui.properties_render", "bl_ui.properties_object", "bl_ui.properties_data_mesh",
+                "bl_ui.properties_material", "bl_ui.space_view3d_toolbar", "bl_ui.properties_scene",
+                "bl_ui.properties_world", "bl_ui.space_image", "bl_ui.properties_output"):
+        for cls in importer.addon_panels(mod):
+            total += 1
+            item, err = importer.build_panel(cls, ctxi)
+            if err and ("Rec" in err or "positional" in err or "keyword" in err or "bl_idname" in err
+                        or "is_popover" in err):
+                failures[cls.__name__] = err
+            if err:
+                ok_ctx += 1
+    print("stress: %d panels; %d stopped on missing headless context; recorder-level failures: %s"
+          % (total, ok_ctx, failures))
+    assert not failures, failures
+
+
 check_icons()
 test_builder_ui()
+test_import()
 test_updater()
 test_all_types()
 code = test_example()

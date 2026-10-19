@@ -241,6 +241,37 @@ class UIB_PT_export(bpy.types.Panel):
         op.target = "FILE"
 
 
+class UIB_PT_import(bpy.types.Panel):
+    bl_label = "Import From Addon"
+    bl_idname = "UIB_PT_import"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "UI Builder"
+    bl_options = {"DEFAULT_CLOSED"}
+
+    def draw(self, context):
+        layout = self.layout
+        s = settings(context)
+        layout.label(text="Copy the UI of an enabled addon", icon="IMPORT")
+        layout.prop(s, "import_module", text="")
+        layout.prop(s, "import_mode", text="")
+        layout.operator("ui_builder.scan_addon", icon="VIEWZOOM")
+        if len(s.import_panels):
+            box = layout.box()
+            col = box.column(align=True)
+            for p in s.import_panels:
+                row = col.row(align=True)
+                if p.parent_id:
+                    row.label(text="", icon="BLANK1")
+                row.prop(p, "include", text=p.label)
+            row = layout.row()
+            row.scale_y = 1.5
+            row.operator("ui_builder.import_addon", icon="IMPORT")
+        else:
+            layout.label(text="Scan, tick panels, then import.")
+            layout.operator("ui_builder.import_addon", text="Import All Panels", icon="IMPORT")
+
+
 class UIB_PT_update(bpy.types.Panel):
     bl_label = "Updates"
     bl_idname = "UIB_PT_update"
@@ -256,4 +287,4 @@ class UIB_PT_update(bpy.types.Panel):
 
 
 classes = (UIB_UL_elements, *[m for _, _, _, m in _add_menus], UIB_MT_add, UIB_MT_project,
-           UIB_PT_main, UIB_PT_element, UIB_PT_export, UIB_PT_update)
+           UIB_PT_main, UIB_PT_element, UIB_PT_export, UIB_PT_import, UIB_PT_update)

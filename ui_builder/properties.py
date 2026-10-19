@@ -125,6 +125,25 @@ class UIB_MockItem(bpy.types.PropertyGroup):
     name: StringProperty()
 
 
+class UIB_ImportPanel(bpy.types.PropertyGroup):
+    idname: StringProperty()
+    label: StringProperty()
+    parent_id: StringProperty()
+    location: StringProperty()
+    include: BoolProperty(name="Include", default=True)
+
+
+_addon_items_cache = []
+
+
+def _addon_items(self, context):
+    from . import importer
+    global _addon_items_cache
+    items = [(m, name, "%d panel(s)" % n) for m, name, n in importer.addon_modules(exclude={__package__})]
+    _addon_items_cache = items or [("NONE", "(no other addon with panels is enabled)", "")]
+    return _addon_items_cache
+
+
 _FORMATS = [
     ("PYTHON", "Python Addon", "A complete, registerable addon file"),
     ("LLM", "LLM Prompt", "Markdown brief: UI outline, property table and the generated code, ready to paste into an LLM"),
@@ -149,8 +168,15 @@ class UIB_Settings(bpy.types.PropertyGroup):
     category: StringProperty(name="Tab", description="Sidebar tab name", default="My Addon")
     export_format: EnumProperty(name="Format", items=_FORMATS, default="PYTHON")
 
+    import_module: EnumProperty(name="Addon", items=_addon_items,
+                                description="Enabled addon whose panels will be imported")
+    import_mode: EnumProperty(name="Mode", default="REPLACE", items=[
+        ("REPLACE", "Replace Project", "Clear the project first and copy the addon's name / location settings"),
+        ("APPEND", "Append", "Add the imported panels after the existing elements")])
+    import_panels: CollectionProperty(type=UIB_ImportPanel)
 
-classes = (UIB_Element, UIB_MockItem, UIB_Settings)
+
+classes = (UIB_Element, UIB_MockItem, UIB_ImportPanel, UIB_Settings)
 
 
 def settings(context=None):

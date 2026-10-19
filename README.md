@@ -27,6 +27,12 @@ Open the 3D Viewport sidebar (`N`) and pick the **UI Builder** tab.
 
 New to it? **Project menu (▾ in the header) > Load Example**.
 
+### Importing another addon's UI
+
+Enable the addon you want to study, then open **UI Builder > Import From Addon**: pick the addon, press **Scan Panels**, tick the panels you want and press **Import**. The panels are replayed against a recording layout, so the result mirrors what the addon really draws: layout containers, property types (with names, tooltips, enum options, ranges and current values), operator buttons, menus, popovers, lists, and panel/sub-panel structure. The addon's name, author, location and tab are copied too (*Replace Project* mode), or choose *Append* to add to what you have. From there you can edit it and export it like any other design.
+
+Limits: panels whose draw code needs context that isn't there (for example a selected object) are imported up to the point where they stop, and you get a warning. Unsupported templates appear as a `(template_x)` label placeholder. Select an object / open the right editor first for the best result.
+
 ### Elements
 
 - **Layout:** Panel, Sub-panel, Collapsible Box, Row, Column, Box, Split, Grid, Separator, Spacer
