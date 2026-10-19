@@ -265,8 +265,10 @@ def draw_element(layout, e):
     m.prop(e, "scale_y")
     m.prop(e, "emboss")
     m.prop(e, "alignment")
-    if d.container or t == "PANEL":
-        m.prop(e, "prop_split")
+    if t in el.SPLIT_TYPES:
+        m.prop(e, "prop_split", text="Label on the Left")
+    elif d.container and t not in ("POPOVER", "OPTION"):
+        m.prop(e, "prop_split", text="Property Split (children)")
 
 
 class UIB_PT_location(bpy.types.Panel):

@@ -94,7 +94,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 4, 0), updater.local_version()
+    assert updater.local_version() == (1, 4, 1), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -253,7 +253,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 4, 0), updater.local_version()
+    assert updater.local_version() == (1, 4, 1), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -725,6 +725,17 @@ def test_branches():
     bpy.ops.ui_builder.replace(type="ENUM")
     assert [e.type for e in s.elements].count("OPTION") == 4, rows()  # one per option again
     assert [e.label for e in s.elements if e.type == "OPTION"] == ["Settings", "Shape", "Extra", "Material"]
+
+    # property split now also applies to a Choice's own widget (label left, value right)
+    s.elements.clear()
+    bpy.ops.ui_builder.add(type="ENUM")
+    s.elements[0].prop_split = True
+    log = []
+    Drawer(s).nodes(FakeLayout(log), tree.build(s.elements))
+    assert [x[0] for x in log][:2] == ["column", "set"], log
+    assert ("set", "use_property_split", True) in log, log
+    assert "use_property_split = True" in export.Exporter(s).python()
+    assert ".column(align=True)" in export.Exporter(s).python()
 
     # merged Color element
     s.elements.clear()

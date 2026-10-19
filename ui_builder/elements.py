@@ -248,6 +248,16 @@ def container_spec(e):
     raise KeyError(t)
 
 
+# Controls drawn with layout.prop(): "property split" puts their label on the left, value on the right.
+SPLIT_TYPES = ("BOOL", "INT", "FLOAT", "SLIDER", "FACTOR", "PERCENT", "ANGLE", "DISTANCE", "STRING",
+               "FILEPATH", "DIRPATH", "ENUM", "COLOR", "COLOR_ALPHA", "VEC2", "VEC3", "EULER", "POINTER", "SEARCH")
+
+
+def wrapper_method(e):
+    """Layout used to wrap a single control that needs layout attributes."""
+    return "column" if e.prop_split else "row"
+
+
 def layout_attrs(e, container):
     """Attribute assignments applied to the layout an element draws into."""
     attrs = []
@@ -265,7 +275,7 @@ def layout_attrs(e, container):
         attrs.append(("emboss", e.emboss))
     if e.alignment != "EXPAND":
         attrs.append(("alignment", e.alignment))
-    if container and e.prop_split:
+    if e.prop_split and (container or e.type in SPLIT_TYPES):
         attrs.append(("use_property_split", True))
         attrs.append(("use_property_decorate", False))
     return attrs

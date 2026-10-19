@@ -91,7 +91,10 @@ class UIB_Element(bpy.types.PropertyGroup):
     alignment: EnumProperty(name="Alignment", items=_ALIGNMENT, default="EXPAND")
     align: BoolProperty(name="Align", description="Join the children without gaps", default=False)
     prop_split: BoolProperty(name="Property Split",
-                             description="use_property_split: label on the left, value on the right",
+                             description="Form layout (use_property_split): the name is shown on the left and "
+                                         "the value on the right, like the Properties editor. For a control "
+                                         "it moves the label beside it; for a container it applies to "
+                                         "everything inside",
                              default=False)
 
     # Container options

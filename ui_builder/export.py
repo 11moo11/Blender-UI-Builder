@@ -248,7 +248,7 @@ class Exporter:
             target = layout
             if attrs:
                 target = self.var("sub")
-                out.append("%s%s = %s.row(align=True)" % (pad, target, layout))
+                out.append("%s%s = %s.%s(align=True)" % (pad, target, layout, el.wrapper_method(e)))
                 out += ["%s%s.%s = %s" % (pad, target, k, _arg(v)) for k, v in attrs]
             for spec in el.leaf_specs(e, export=True):
                 out.append(pad + self.call_line(target, n, spec))
@@ -258,7 +258,7 @@ class Exporter:
             attrs = el.layout_attrs(e, False)
             if attrs:
                 target = self.var("sub")
-                out.append("%s%s = %s.row(align=True)" % (pad, target, layout))
+                out.append("%s%s = %s.%s(align=True)" % (pad, target, layout, el.wrapper_method(e)))
                 out += ["%s%s.%s = %s" % (pad, target, k, _arg(v)) for k, v in attrs]
             for spec in el.leaf_specs(e, export=True):
                 out.append(pad + self.call_line(target, n, spec))
