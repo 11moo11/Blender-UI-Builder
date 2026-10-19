@@ -17,28 +17,32 @@ def _location(cls):
                     getattr(cls, "bl_parent_id", "")).title()
 
 
-class UIB_OT_scan_addon(bpy.types.Operator):
-    """List the panels the chosen addon has registered"""
-    bl_idname = "ui_builder.scan_addon"
-    bl_label = "Scan Panels"
+class UIB_OT_toggle_import_panel(bpy.types.Operator):
+    """Include or exclude this panel from the import"""
+    bl_idname = "ui_builder.toggle_import_panel"
+    bl_label = "Toggle Panel"
+    bl_options = {"INTERNAL"}
 
-    @classmethod
-    def poll(cls, context):
-        return settings(context).import_module not in ("", "NONE")
+    idname: bpy.props.StringProperty()
 
     def execute(self, context):
         s = settings(context)
-        s.import_panels.clear()
-        classes = importer.addon_panels(s.import_module)
-        for cls in classes:
-            row = s.import_panels.add()
-            row.idname = getattr(cls, "bl_idname", "") or cls.__name__
-            row.label = getattr(cls, "bl_label", "") or cls.__name__
-            row.parent_id = getattr(cls, "bl_parent_id", "")
-            row.location = _location(cls)
-        if not classes:
-            self.report({"WARNING"}, "That addon has no registered panels")
+        for i, p in enumerate(s.import_skip):
+            if p.idname == self.idname:
+                s.import_skip.remove(i)
+                return {"FINISHED"}
+        s.import_skip.add().idname = self.idname
         return {"FINISHED"}
+
+
+def panel_id(cls):
+    return getattr(cls, "bl_idname", "") or cls.__name__
+
+
+def listed_panels(s):
+    """(class, included) for every registered panel of the chosen addon."""
+    skipped = {p.idname for p in s.import_skip}
+    return [(c, panel_id(c) not in skipped) for c in importer.addon_panels(s.import_module)]
 
 
 class UIB_OT_import_addon(bpy.types.Operator):
@@ -54,11 +58,7 @@ class UIB_OT_import_addon(bpy.types.Operator):
     def execute(self, context):
         s = settings(context)
         module = s.import_module
-        if not len(s.import_panels):
-            bpy.ops.ui_builder.scan_addon()
-        wanted = {p.idname for p in s.import_panels if p.include}
-        classes = [c for c in importer.addon_panels(module)
-                   if (getattr(c, "bl_idname", "") or c.__name__) in wanted]
+        classes = [c for c, included in listed_panels(s) if included]
         if not classes:
             self.report({"WARNING"}, "No panels selected")
             return {"CANCELLED"}
@@ -109,4 +109,4 @@ class UIB_OT_import_addon(bpy.types.Operator):
         return {"FINISHED"}
 
 
-classes = (UIB_OT_scan_addon, UIB_OT_import_addon)
+classes = (UIB_OT_toggle_import_panel, UIB_OT_import_addon)

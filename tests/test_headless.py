@@ -94,7 +94,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 2, 2), updater.local_version()
+    assert updater.local_version() == (1, 2, 3), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -253,13 +253,13 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 2, 2), updater.local_version()
+    assert updater.local_version() == (1, 2, 3), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
 
 def test_import():
-    from ui_builder import importer, preferences
+    from ui_builder import importer, preferences, ui
     from bpy.props import BoolProperty, EnumProperty, FloatProperty, PointerProperty, StringProperty, FloatVectorProperty
 
     class FakeProps(bpy.types.PropertyGroup):
@@ -355,9 +355,13 @@ def test_import():
         try:
             s.import_module = "fakeaddon"
             s.elements.clear()
-            s.import_panels.clear()
-            bpy.ops.ui_builder.scan_addon()
-            assert [p.idname for p in s.import_panels] == ["FAKE_PT_main", "FAKE_PT_sub"]
+            from ui_builder import import_ops
+            assert [(import_ops.panel_id(c), inc) for c, inc in import_ops.listed_panels(s)] == [
+                ("FAKE_PT_main", True), ("FAKE_PT_sub", True)]
+            bpy.ops.ui_builder.toggle_import_panel(idname="FAKE_PT_sub")
+            assert [inc for _, inc in import_ops.listed_panels(s)] == [True, False]
+            bpy.ops.ui_builder.toggle_import_panel(idname="FAKE_PT_sub")
+            ui.UIB_PT_import.draw(types.SimpleNamespace(layout=FakeLayout([])), bpy.context)
             bpy.ops.ui_builder.import_addon()
             assert s.category == "Fake" and s.placement == "VIEW_3D_UI" and s.prefix == "fakeaddon"
             assert [e.type for e in s.elements if e.type == "PANEL"] == ["PANEL", "PANEL"]

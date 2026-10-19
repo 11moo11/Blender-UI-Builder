@@ -164,6 +164,10 @@ def _addon_items(self, context):
     return _addon_items_cache
 
 
+def _on_import_module(self, context):
+    self.import_skip.clear()
+
+
 _FORMATS = [
     ("PYTHON", "Python Addon", "A complete, registerable addon file"),
     ("LLM", "LLM Prompt", "Markdown brief: UI outline, property table and the generated code, ready to paste into an LLM"),
@@ -192,12 +196,12 @@ class UIB_Settings(bpy.types.PropertyGroup):
     map_on: BoolProperty(get=lambda self: True, set=lambda self, v: None)  # pressed-looking map cell
     map_off: BoolProperty(get=lambda self: False, set=lambda self, v: None)
 
-    import_module: EnumProperty(name="Addon", items=_addon_items,
+    import_module: EnumProperty(name="Addon", items=_addon_items, update=_on_import_module,
                                 description="Enabled addon whose panels will be imported")
     import_mode: EnumProperty(name="Mode", default="REPLACE", items=[
         ("REPLACE", "Replace Project", "Clear the project first and copy the addon's name / location settings"),
         ("APPEND", "Append", "Add the imported panels after the existing elements")])
-    import_panels: CollectionProperty(type=UIB_ImportPanel)
+    import_skip: CollectionProperty(type=UIB_ImportPanel)  # panels the user un-ticked
 
 
 classes = (UIB_Element, UIB_MockItem, UIB_ImportPanel, UIB_Settings)

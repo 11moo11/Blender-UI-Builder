@@ -3,7 +3,7 @@
 import bpy
 
 from . import elements as el
-from . import icons, locmap, preferences, updater
+from . import icons, import_ops, locmap, preferences, updater
 from .properties import settings
 
 
@@ -309,21 +309,22 @@ class UIB_PT_import(bpy.types.Panel):
         layout.label(text="Copy the UI of an enabled addon", icon="IMPORT")
         layout.prop(s, "import_module", text="")
         layout.prop(s, "import_mode", text="")
-        layout.operator("ui_builder.scan_addon", icon="VIEWZOOM")
-        if len(s.import_panels):
+        panels = import_ops.listed_panels(s) if s.import_module != "NONE" else []
+        if panels:
             box = layout.box()
             col = box.column(align=True)
-            for p in s.import_panels:
+            for cls, included in panels:
                 row = col.row(align=True)
-                if p.parent_id:
+                if getattr(cls, "bl_parent_id", ""):
                     row.label(text="", icon="BLANK1")
-                row.prop(p, "include", text=p.label)
+                op = row.operator("ui_builder.toggle_import_panel", text=getattr(cls, "bl_label", "") or cls.__name__,
+                                  icon="CHECKBOX_HLT" if included else "CHECKBOX_DEHLT", emboss=False)
+                op.idname = import_ops.panel_id(cls)
             row = layout.row()
             row.scale_y = 1.5
             row.operator("ui_builder.import_addon", icon="IMPORT")
         else:
-            layout.label(text="Scan, tick panels, then import.")
-            layout.operator("ui_builder.import_addon", text="Import All Panels", icon="IMPORT")
+            layout.label(text="Enable an addon that has panels first.", icon="INFO")
 
 
 class UIB_PT_update(bpy.types.Panel):
