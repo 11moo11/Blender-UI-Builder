@@ -336,3 +336,80 @@ def value_attr(e):
     if e.type in ("POINTER", "TEMPLATE_ID"):
         return POINTER_ATTR[e.id_type]
     return VALUE_ATTR[e.type]
+
+
+# --- Where things live in the Blender window ---------------------------------------
+import bpy  # noqa: E402
+
+SPACE_ITEMS = [(i.identifier, i.name, "") for i in bpy.types.Panel.bl_rna.properties["bl_space_type"].enum_items]
+REGION_ITEMS = [(i.identifier, i.name, "") for i in bpy.types.Panel.bl_rna.properties["bl_region_type"].enum_items]
+SPACE_TITLES = {k: v for k, v, _ in SPACE_ITEMS}
+REGION_TITLES = {
+    "UI": "Sidebar (N panel)", "HEADER": "Header / dropdown", "TOOL_HEADER": "Tool settings bar",
+    "TOOLS": "Toolbar", "WINDOW": "Main area", "FOOTER": "Footer", "TOOL_PROPS": "Tool properties",
+}
+
+# Elements that are not drawn by their panel at all (draw handlers, overlays, header buttons...)
+# id -> (title, space, cell)
+LOCATIONS = {
+    "PANEL": ("In its panel", None, None),
+    "VIEWPORT": ("3D Viewport (overlay / gizmo / draw handler)", "VIEW_3D", "MAIN"),
+    "VP_HEADER": ("3D Viewport header", "VIEW_3D", "HEADER"),
+    "TOOLBAR": ("3D Viewport toolbar", "VIEW_3D", "TOOLBAR"),
+    "SIDEBAR": ("3D Viewport sidebar", "VIEW_3D", "SIDEBAR"),
+    "IMAGE_EDITOR": ("Image Editor", "IMAGE_EDITOR", "MAIN"),
+    "TOP_BAR": ("Top bar", "TOP_BAR", "MAIN"),
+    "OUTLINER": ("Outliner", "OUTLINER", "MAIN"),
+    "PROPERTIES": ("Properties editor", "PROPERTIES", "MAIN"),
+    "TIMELINE": ("Timeline", "DOPESHEET_EDITOR", "MAIN"),
+    "POPUP": ("Popup / dialog window", None, None),
+}
+LOCATION_ITEMS = [(k, v[0], "") for k, v in LOCATIONS.items()]
+
+
+class Place:
+    """Where a panel is registered: bl_space_type / bl_region_type / bl_context / category / parent."""
+
+    def __init__(self, space, region, context=None, category="", parent=""):
+        self.space, self.region, self.context = space, region, context or None
+        self.category, self.parent = category, parent or ""
+
+    def cell(self):
+        """(space, cell) used by the location maps."""
+        if self.space in ("PROPERTIES", "OUTLINER", "TOP_BAR"):
+            return self.space, "MAIN"
+        if self.region == "UI":
+            return self.space, "SIDEBAR"
+        if self.region in ("HEADER", "TOOL_HEADER", "FOOTER") or self.parent:
+            return self.space, "HEADER"
+        if self.region == "TOOLS":
+            return self.space, "TOOLBAR"
+        return self.space, "MAIN"
+
+    def title(self):
+        s = SPACE_TITLES.get(self.space, self.space.title())
+        if self.space == "PROPERTIES":
+            return "Properties editor > %s tab" % (self.context or "any").title()
+        where = REGION_TITLES.get(self.region, self.region.title())
+        text = "%s > %s" % (s, where)
+        if self.region == "UI" and self.category:
+            text += " > tab '%s'" % self.category
+        if self.parent:
+            text += " > inside %s" % self.parent
+        return text
+
+
+def project_place(settings):
+    _, space, region, ctx = PLACEMENTS[settings.placement]
+    return Place(space, region, ctx, settings.category)
+
+
+def panel_place(e, settings):
+    """Resolved Place of a root panel element."""
+    mode = e.panel_placement
+    if mode == "PROJECT":
+        return project_place(settings)
+    if mode == "CUSTOM":
+        return Place(e.p_space, e.p_region, e.p_context, e.p_category or settings.category, e.p_parent)
+    _, space, region, ctx = PLACEMENTS[mode]
+    return Place(space, region, ctx, e.p_category or settings.category, e.p_parent)

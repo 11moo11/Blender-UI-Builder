@@ -94,7 +94,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 1, 0), updater.local_version()
+    assert updater.local_version() == (1, 2, 0), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -253,7 +253,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 1, 0), updater.local_version()
+    assert updater.local_version() == (1, 2, 0), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -394,7 +394,70 @@ def test_import():
     assert not failures, failures
 
 
+def test_locations():
+    from ui_builder import importer, locmap, ui
+    from ui_builder.operators import new_element
+
+    class LG_PT_view(bpy.types.Panel):
+        bl_label = "View Settings"; bl_idname = "LG_PT_view"
+        bl_space_type = "VIEW_3D"; bl_region_type = "UI"; bl_category = "Looking Glass"
+        def draw(self, context): self.layout.label(text="main")
+
+    class LG_PT_holo(bpy.types.Panel):  # lives in the viewport's Overlays dropdown
+        bl_label = "Hologram Preview"; bl_idname = "LG_PT_holo"
+        bl_space_type = "VIEW_3D"; bl_region_type = "HEADER"; bl_parent_id = "VIEW3D_PT_overlay"
+        def draw(self, context): self.layout.label(text="Alignment")
+
+    class LG_PT_img(bpy.types.Panel):  # lives in the Image Editor sidebar
+        bl_label = "Display hologram preview"; bl_idname = "LG_PT_img"
+        bl_space_type = "IMAGE_EDITOR"; bl_region_type = "UI"; bl_category = "Looking Glass"
+        def draw(self, context): self.layout.label(text="Device")
+
+    classes = (LG_PT_view, LG_PT_holo, LG_PT_img)
+    for c in classes:
+        bpy.utils.register_class(c)
+        c.__module__ = "lgaddon"
+    try:
+        s.elements.clear()
+        s.placement, s.category = "VIEW_3D_UI", "Looking Glass"
+        ctxi = importer.Ctx(bpy.context)
+        project = el.project_place(s)
+        built = {c.bl_idname: (c, importer.build_panel(c, ctxi)[0]) for c in importer.addon_panels("lgaddon")}
+        roots = []
+        for idn, (c, item) in built.items():
+            item.fields.update(importer.placement_fields(c, project))
+            roots.append(item)
+        assert "panel_placement" not in built["LG_PT_view"][1].fields
+        assert built["LG_PT_holo"][1].fields["panel_placement"] == "CUSTOM"
+        assert built["LG_PT_holo"][1].fields["p_parent"] == "VIEW3D_PT_overlay"
+        assert built["LG_PT_img"][1].fields["panel_placement"] == "IMAGE_EDITOR_UI"
+        importer.commit(s, roots, new_element, tree.normalize)
+        # an element that is drawn in the viewport rather than in a panel
+        new_element(s, "LABEL", len(s.elements), 1, "Hologram block")
+        e = s.elements[len(s.elements) - 1]
+        e.location, e.location_note = "VIEWPORT", "gpu draw handler"
+        code = export.Exporter(s).python()
+        compile(code, "<loc>", "exec")
+        assert "bl_region_type = \"HEADER\"" in code and "bl_parent_id = \"VIEW3D_PT_overlay\"" in code
+        assert "bl_space_type = \"IMAGE_EDITOR\"" in code
+        assert "NOTE: 'Hologram block' is not drawn in this panel" in code
+        llm = export.Exporter(s).llm()
+        assert "Image Editor > Sidebar" in llm and "inside VIEW3D_PT_overlay" in llm and "DRAWN OUTSIDE" in llm
+        entries, selected, node = locmap.entries(s)
+        cells = sorted((x.space, x.cell) for x in entries)
+        assert ("VIEW_3D", "HEADER") in cells and ("IMAGE_EDITOR", "SIDEBAR") in cells and ("VIEW_3D", "MAIN") in cells, cells
+        for i in range(len(s.elements)):
+            s.active_index = i
+            ui.UIB_PT_location.draw(types.SimpleNamespace(layout=FakeLayout([])), bpy.context)
+        check_preview("locations")
+    finally:
+        for c in reversed(classes):
+            bpy.utils.unregister_class(c)
+    print("locations OK")
+
+
 check_icons()
+test_locations()
 test_builder_ui()
 test_import()
 test_updater()

@@ -27,6 +27,16 @@ Open the 3D Viewport sidebar (`N`) and pick the **UI Builder** tab.
 
 New to it? **Project menu (▾ in the header) > Load Example**.
 
+### Where it lives
+
+Not everything is in a sidebar panel: a panel can sit in a header dropdown, the Image Editor or the Properties editor, and some things (a viewport overlay, a gizmo, a header button) aren't drawn by a panel at all. The **Where It Lives** panel shows this:
+
+- A schematic of the Blender window lights up every area the project uses (blue) and the selected item's area (red), with a zoomed map of the exact region (header, toolbar, main area, sidebar).
+- **Panels:** choose *Same as project*, a preset (Image Editor sidebar, Properties tab...) or *Custom* editor + region + context + tab, and optionally a built-in **Parent Panel** (e.g. `VIEW3D_PT_overlay` puts it in the Overlays dropdown).
+- **Other elements:** *Drawn In* marks things that live elsewhere (3D Viewport overlay, header, popup...), with a free-text note. The mockup shows them as greyed, tagged stand-ins, and they aren't emitted into the panel's `draw`.
+- The importer records each scanned panel's real editor / region / parent automatically.
+- Locations flow into the exported code (`bl_space_type`, `bl_region_type`, `bl_parent_id`, `# NOTE` lines) and the LLM prompt.
+
 ### Importing another addon's UI
 
 Enable the addon you want to study, then open **UI Builder > Import From Addon**: pick the addon, press **Scan Panels**, tick the panels you want and press **Import**. The panels are replayed against a recording layout, so the result mirrors what the addon really draws: layout containers, property types (with names, tooltips, enum options, ranges and current values), operator buttons, menus, popovers, lists, and panel/sub-panel structure. The addon's name, author, location and tab are copied too (*Replace Project* mode), or choose *Append* to add to what you have. From there you can edit it and export it like any other design.

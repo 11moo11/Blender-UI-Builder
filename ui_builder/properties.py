@@ -51,6 +51,24 @@ class UIB_Element(bpy.types.PropertyGroup):
     indent: IntProperty(default=0, min=0)
     expanded: BoolProperty(name="Expanded", default=True)
 
+    # Where it lives in the Blender window
+    panel_placement: EnumProperty(
+        name="Location", default="PROJECT",
+        items=[("PROJECT", "Same as project", "Use the location chosen in the Export panel"),
+               ("CUSTOM", "Custom (space + region)", "Any editor / region, e.g. a header dropdown")]
+        + [(k, v[0], "") for k, v in el.PLACEMENTS.items()])
+    p_space: EnumProperty(name="Editor", items=el.SPACE_ITEMS, default="VIEW_3D")
+    p_region: EnumProperty(name="Region", items=el.REGION_ITEMS, default="UI")
+    p_context: StringProperty(name="Context", description="bl_context, e.g. scene / object (Properties editor)")
+    p_category: StringProperty(name="Tab", description="bl_category: sidebar tab name (blank = project tab)")
+    p_parent: StringProperty(name="Parent Panel",
+                             description="bl_parent_id of a panel that isn't part of this project "
+                                         "(e.g. VIEW3D_PT_overlay puts the panel in the Overlays dropdown)")
+    location: EnumProperty(name="Drawn In", items=el.LOCATION_ITEMS, default="PANEL",
+                           description="Elements that are not drawn by their panel (viewport overlays, "
+                                       "header buttons, popups) are marked here")
+    location_note: StringProperty(name="Note", description="How it gets drawn / what it is, for the exported notes")
+
     # Layout modifiers
     enabled: BoolProperty(name="Enabled", description="layout.enabled", default=True)
     active: BoolProperty(name="Active", description="layout.active (greyed out when off)", default=True)
@@ -167,6 +185,8 @@ class UIB_Settings(bpy.types.PropertyGroup):
                             items=[(k, v[0], "") for k, v in el.PLACEMENTS.items()])
     category: StringProperty(name="Tab", description="Sidebar tab name", default="My Addon")
     export_format: EnumProperty(name="Format", items=_FORMATS, default="PYTHON")
+    map_on: BoolProperty(get=lambda self: True, set=lambda self, v: None)  # pressed-looking map cell
+    map_off: BoolProperty(get=lambda self: False, set=lambda self, v: None)
 
     import_module: EnumProperty(name="Addon", items=_addon_items,
                                 description="Enabled addon whose panels will be imported")

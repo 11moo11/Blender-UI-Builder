@@ -3,7 +3,7 @@
 import bpy
 
 from . import elements as el
-from . import icons, preferences, updater
+from . import icons, locmap, preferences, updater
 from .properties import settings
 
 
@@ -206,6 +206,62 @@ def draw_element(layout, e):
         m.prop(e, "prop_split")
 
 
+class UIB_PT_location(bpy.types.Panel):
+    bl_label = "Where It Lives"
+    bl_idname = "UIB_PT_location"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "UI Builder"
+
+    def draw(self, context):
+        layout = self.layout
+        s = settings(context)
+        entries, selected, node = locmap.entries(s)
+        if not entries:
+            layout.label(text="Add elements to see where they live.", icon="INFO")
+            return
+        locmap.draw_overview(layout, s, entries, selected)
+        row = layout.row()
+        row.label(text="Blue: used by the project", icon="DOT")
+        row.label(text="Red: selected")
+
+        if node is not None:
+            e = node.elem
+            box = layout.box()
+            box.label(text="Selected: %s" % (e.label or el.DEFS[e.type].label), icon=el.DEFS[e.type].icon)
+            if e.type == "PANEL" and node.is_panel and node.parent is None:
+                box.prop(e, "panel_placement", text="")
+                if e.panel_placement == "CUSTOM":
+                    col = box.column(align=True)
+                    col.prop(e, "p_space")
+                    col.prop(e, "p_region")
+                    col.prop(e, "p_context")
+                if e.panel_placement != "PROJECT":
+                    box.prop(e, "p_category")
+                    box.prop(e, "p_parent")
+            elif e.type == "PANEL":
+                box.label(text="Sub-panel: shown inside its parent panel.")
+            elif node.outside is not None and node.outside is not node:
+                box.label(text="Follows its container's location.")
+            else:
+                box.prop(e, "location", text="")
+                if e.location != "PANEL":
+                    box.prop(e, "location_note")
+                else:
+                    box.label(text="Drawn by its panel. Change this if it lives elsewhere", icon="INFO")
+        if selected is not None:
+            layout.separator()
+            wrap_label = locmap.wrap_label
+            wrap_label(layout, selected.title, icon="WINDOW")
+            if selected.space:
+                locmap.draw_detail(layout, s, selected)
+
+        box = layout.box()
+        box.label(text="Everything", icon="OUTLINER")
+        for entry in entries:
+            locmap.wrap_label(box, "%s: %s" % (entry.label, entry.title), width=36, icon="DOT")
+
+
 class UIB_PT_export(bpy.types.Panel):
     bl_label = "Export"
     bl_idname = "UIB_PT_export"
@@ -287,4 +343,4 @@ class UIB_PT_update(bpy.types.Panel):
 
 
 classes = (UIB_UL_elements, *[m for _, _, _, m in _add_menus], UIB_MT_add, UIB_MT_project,
-           UIB_PT_main, UIB_PT_element, UIB_PT_export, UIB_PT_import, UIB_PT_update)
+           UIB_PT_main, UIB_PT_element, UIB_PT_location, UIB_PT_export, UIB_PT_import, UIB_PT_update)

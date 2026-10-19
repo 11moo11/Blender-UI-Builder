@@ -495,6 +495,26 @@ def build_panel(cls, ctx):
     return item, error
 
 
+def placement_fields(cls, project):
+    """Element fields that record where a root panel really lives (empty = same as project)."""
+    space = getattr(cls, "bl_space_type", "VIEW_3D")
+    region = getattr(cls, "bl_region_type", "UI")
+    ctx = getattr(cls, "bl_context", "") or None
+    cat = getattr(cls, "bl_category", "")
+    parent = getattr(cls, "bl_parent_id", "")
+    if (space, region, ctx) == (project.space, project.region, project.context) and not parent \
+            and (not cat or region != "UI" or cat == project.category):
+        return {}
+    fields = {"p_parent": parent}
+    for key, spec in el.PLACEMENTS.items():
+        if spec[1:] == (space, region, ctx) and (region != "UI" or cat in ("", project.category)):
+            fields["panel_placement"] = key
+            return fields
+    fields.update(panel_placement="CUSTOM", p_space=space, p_region=region, p_context=ctx or "",
+                  p_category=cat)
+    return fields
+
+
 def commit(s, items, new_element, normalize):
     """Append Item trees to the builder's element list."""
     def add(item, depth):

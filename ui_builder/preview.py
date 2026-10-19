@@ -101,6 +101,13 @@ class Drawer:
         d = el.DEFS.get(e.type)
         if d is None:
             return
+        if n.outside is n:  # drawn somewhere else in Blender: show a tagged, greyed stand-in
+            box = layout.box()
+            box.label(text="Lives in: " + el.LOCATIONS[e.location][0], icon="WINDOW")
+            if e.location_note:
+                box.label(text=e.location_note)
+            layout = box.column()
+            layout.active = False
         if e.type == "POPOVER":
             self.popover(layout, n)
         elif d.container:
@@ -128,6 +135,8 @@ class Drawer:
         if e.type in ("PANEL", "COLLAPSE"):
             box = layout.box()
             self._header(box, e, e.type == "PANEL" and e.header_checkbox)
+            if e.type == "PANEL" and n.is_panel and n.parent is None and e.panel_placement != "PROJECT":
+                box.label(text=el.panel_place(e, self.settings).title(), icon="WINDOW")
             if e.expanded:
                 body = box.column()
                 _apply(body, attrs)

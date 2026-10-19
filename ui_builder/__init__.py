@@ -1,7 +1,7 @@
 bl_info = {
     "name": "UI Builder",
     "author": "11moo11",
-    "version": (1, 1, 0),
+    "version": (1, 2, 0),
     "blender": (3, 6, 0),
     "location": "3D Viewport > Sidebar > UI Builder",
     "description": "Design Blender addon UI mockups visually and export them as Python or an LLM prompt",
@@ -13,11 +13,11 @@ bl_info = {
 if "bpy" in locals():  # F8 / Reload Scripts: pick up edited submodules
     import importlib
     for _m in (icons, elements, tree, properties, preview, operators, export, project, importer,
-               import_ops, updater, preferences, ui):
+               import_ops, locmap, updater, preferences, ui):
         importlib.reload(_m)
 else:
     from . import (icons, elements, tree, properties, preview, operators, export, project,
-                   importer, import_ops, updater, preferences, ui)
+                   importer, import_ops, locmap, updater, preferences, ui)
 
 import bpy
 

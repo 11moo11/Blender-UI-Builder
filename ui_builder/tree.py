@@ -19,6 +19,24 @@ class Node:
         return self.elem.type == "PANEL" and (self.parent is None or self.parent.is_panel)
 
     @property
+    def outside(self):
+        """Nearest self-or-ancestor that is drawn somewhere other than its panel, else None."""
+        n = self
+        while n is not None:
+            if n.elem.type != "PANEL" and n.elem.location != "PANEL":
+                return n
+            n = n.parent
+        return None
+
+    @property
+    def root_panel(self):
+        """The root bpy Panel this node is drawn in (None for loose root elements)."""
+        n = self
+        while n is not None and not (n.elem.type == "PANEL" and n.is_panel and n.parent is None):
+            n = n.parent
+        return n
+
+    @property
     def is_collapsible(self):
         """Box with a toggle header (COLLAPSE, or a PANEL nested in a non-panel container)."""
         return self.elem.type == "COLLAPSE" or (self.elem.type == "PANEL" and not self.is_panel)

@@ -12,11 +12,9 @@ from . import tree
 
 
 def _location(cls):
-    space = getattr(cls, "bl_space_type", "")
-    region = getattr(cls, "bl_region_type", "")
-    ctx = getattr(cls, "bl_context", "") or None
-    cat = getattr(cls, "bl_category", "")
-    return "%s > %s%s" % (space.replace("_", " ").title(), cat or ctx or region.title(), "")
+    return el.Place(getattr(cls, "bl_space_type", ""), getattr(cls, "bl_region_type", ""),
+                    getattr(cls, "bl_context", "") or None, getattr(cls, "bl_category", ""),
+                    getattr(cls, "bl_parent_id", "")).title()
 
 
 class UIB_OT_scan_addon(bpy.types.Operator):
@@ -95,6 +93,12 @@ class UIB_OT_import_addon(bpy.types.Operator):
                     break
             if getattr(first, "bl_category", ""):
                 s.category = first.bl_category
+        project = el.project_place(s)
+        for cls in classes:
+            parent_in_addon = getattr(cls, "bl_parent_id", "") in items
+            if not parent_in_addon:
+                items[getattr(cls, "bl_idname", "") or cls.__name__].fields.update(
+                    importer.placement_fields(cls, project))
         importer.commit(s, roots, new_element, tree.normalize)
         s.active_index = 0
         ensure_mock_items(context.scene)

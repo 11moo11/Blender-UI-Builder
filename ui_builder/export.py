@@ -42,7 +42,8 @@ class Exporter:
         self.roots = tree.build(settings.elements)
         self.nodes = list(tree.walk(self.roots))
         self._assign_names()
-        self.space, self.region, self.context = el.PLACEMENTS[settings.placement][1:]
+        self.place = el.project_place(settings)
+        self.region = self.place.region
         self.has_list = any(n.elem.type == "LIST" for n in self.nodes)
         self.prop_lines = []  # property group annotations
         self.operators = []  # (idname, class name, label, description)
@@ -206,6 +207,12 @@ class Exporter:
         for n in nodes:
             if n.is_panel:
                 continue  # emitted as its own bpy.types.Panel
+            if n.elem.type != "PANEL" and n.elem.location != "PANEL":
+                note = ("%s - %s" % (el.LOCATIONS[n.elem.location][0], n.elem.location_note)
+                        if n.elem.location_note else el.LOCATIONS[n.elem.location][0])
+                out.append("%s# NOTE: %r is not drawn in this panel; it lives in: %s"
+                           % ("    " * ind, n.elem.label or n.name, note))
+                continue
             self.gen_node(n, layout, ind, out)
 
     def gen_node(self, n, layout, ind, out):
@@ -263,18 +270,21 @@ class Exporter:
         return out
 
     # -- class generation ----------------------------------------------------------
-    def _panel_header(self, bl_idname, label, parent=None, closed=False, instanced=False):
+    def _panel_header(self, bl_idname, label, parent=None, closed=False, instanced=False, place=None):
+        place = place or self.place
         lines = ["class %s(bpy.types.Panel):" % bl_idname,
                  "    bl_idname = %s" % _lit(bl_idname),
                  "    bl_label = %s" % _arg(label),
-                 "    bl_space_type = %s" % _lit(self.space),
-                 "    bl_region_type = %s" % _lit(self.region)]
-        if self.context:
-            lines.append("    bl_context = %s" % _lit(self.context))
-        if self.region == "UI":
-            lines.append("    bl_category = %s" % _arg(self.s.category or self.addon_name))
+                 "    bl_space_type = %s" % _lit(place.space),
+                 "    bl_region_type = %s" % _lit(place.region)]
+        if place.context:
+            lines.append("    bl_context = %s" % _lit(place.context))
+        if place.region == "UI":
+            lines.append("    bl_category = %s" % _arg(place.category or self.s.category or self.addon_name))
         if parent:
             lines.append("    bl_parent_id = %s" % _lit(parent))
+        elif place.parent:
+            lines.append("    bl_parent_id = %s  # built-in panel this one is shown inside" % _lit(place.parent))
         opts = []
         if closed:
             opts.append("'DEFAULT_CLOSED'")
@@ -284,10 +294,11 @@ class Exporter:
             lines.append("    bl_options = {%s}" % ", ".join(opts))
         return lines
 
-    def gen_panel(self, n, parent_id=None):
+    def gen_panel(self, n, parent_id=None, place=None):
         e = n.elem
         cid = self.cls("PT", n)
-        lines = self._panel_header(cid, e.label or n.name, parent_id, e.default_closed)
+        place = place or el.panel_place(e, self.s)
+        lines = self._panel_header(cid, e.label or n.name, parent_id, e.default_closed, place=place)
         if e.header_checkbox:
             lines += ["", "    def draw_header(self, context):",
                       "        props = context.scene.%s" % self.group,
@@ -298,7 +309,7 @@ class Exporter:
         self.panels.append((cid, lines))
         for c in n.children:
             if c.is_panel:
-                self.gen_panel(c, cid)
+                self.gen_panel(c, cid, place)
 
     def gen_support(self):
         for n in self.nodes:
@@ -469,6 +480,11 @@ class Exporter:
                 bits.append("searches bpy.data.%s" % e.search_source)
             if e.description:
                 bits.append("tooltip: %s" % e.description)
+            if e.type == "PANEL" and n.is_panel and n.parent is None:
+                bits.append("location: " + el.panel_place(e, self.s).title())
+            elif e.type != "PANEL" and e.location != "PANEL":
+                bits.append("DRAWN OUTSIDE THE PANEL, in: " + el.LOCATIONS[e.location][0]
+                            + (" (%s)" % e.location_note if e.location_note else ""))
             ref = self._ref(n)
             if ref:
                 bits.append("-> " + ref)
@@ -484,6 +500,18 @@ class Exporter:
 
         rec(self.roots, 0)
         return "\n".join(lines)
+
+    def location_lines(self):
+        lines = []
+        for n in self.roots:
+            if n.is_panel:
+                lines.append("- Panel \"%s\": %s" % (n.elem.label or n.name, el.panel_place(n.elem, self.s).title()))
+        for n in self.nodes:
+            if n.outside is n:
+                lines.append("- \"%s\" is NOT drawn by a panel; it lives in: %s%s" % (
+                    n.elem.label or n.name, el.LOCATIONS[n.elem.location][0],
+                    " - " + n.elem.location_note if n.elem.location_note else ""))
+        return lines or ["- Everything is in the main panel."]
 
     def _ref(self, n):
         t = n.elem.type
@@ -517,6 +545,10 @@ class Exporter:
             "- Location: %s%s" % (loc, " > tab \"%s\"" % self.s.category if self.region == "UI" else ""),
             "- All UI state lives in one `PropertyGroup` on the scene: `context.scene.%s`" % self.group,
             "- The UI layout was designed visually; keep it unless I ask for changes.",
+            "",
+            "## Where things live in the Blender UI",
+            "",
+        ] + self.location_lines() + [
             "",
             "## UI outline",
             "",
