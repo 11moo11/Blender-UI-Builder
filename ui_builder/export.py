@@ -535,6 +535,17 @@ class Exporter:
         rec(self.roots, 0)
         return "\n".join(lines)
 
+    def placeholders(self):
+        """Elements that still contain importer placeholders (unknown options / items)."""
+        out = []
+        for n in self.nodes:
+            e = n.elem
+            if e.type in ("ENUM", "MENU") and "PLACEHOLDER_" in e.enum_items:
+                out.append("- \"%s\" (`%s`): its option list is a PLACEHOLDER (the real options could not be "
+                           "read). Do NOT guess; ask me for the real options or derive them from my description."
+                           % (e.label or n.name, n.name))
+        return out
+
     def location_lines(self):
         lines = []
         for n in self.roots:
@@ -584,6 +595,10 @@ class Exporter:
             "",
         ] + self.location_lines() + [
             "",
+        ] + ([
+            "## Placeholders - do not treat as real",
+            "",
+        ] + self.placeholders() + [""] if self.placeholders() else []) + [
             "## UI outline",
             "",
             self.outline() or "(empty)",

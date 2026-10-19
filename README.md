@@ -51,6 +51,8 @@ Enable the addon you want to study, then open **UI Builder > Import From Addon**
 
 The import tidies up the layout scaffolding addons generate: empty rows/columns are dropped, single-child rows/columns are unwrapped (their scale/enabled/alert modifiers move onto the child), nested same-kind columns/rows are merged, and stray separators are removed. A text label directly followed by an unnamed value control (Choice, slider, text field, number, color, checkbox... the `Device:` + dropdown pattern) becomes a single control named after the label, with *Label on the Left* on. `template_icon` becomes a *Preview Image* element; dynamic dropdowns keep their current value as an option.
 
+What is scraped for each field: the declared **default** (not the live runtime value, which can be arbitrary state), range, tooltip and, for dropdowns, the **options**: static lists are read from Blender, and runtime-generated lists are obtained by calling the addon's own items function. When options still can't be read, the dropdown gets clearly fake entries (`PLACEHOLDER_OPTION_1`, `PLACEHOLDER_OPTION_2`, or `PLACEHOLDER_ITEM_n` for menus) plus an `UNKNOWN OPTIONS` note in its tooltip, a red warning in the Selected Element panel, and a "Placeholders - do not treat as real" section in the LLM prompt telling the model not to guess.
+
 Limits: panels whose draw code needs context that isn't there (for example a selected object) are imported up to the point where they stop, and you get a warning. Unsupported templates appear as a `(template_x)` label placeholder. Select an object / open the right editor first for the best result.
 
 ### Elements

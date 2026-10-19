@@ -238,6 +238,11 @@ def draw_element(layout, e):
                 r.prop(e, "range_max")
     elif t in ("ENUM", "MENU"):
         col.prop(e, "enum_items")
+        if "PLACEHOLDER_" in e.enum_items:
+            warn = col.box()
+            warn.alert = True
+            warn.label(text="Placeholder options: the real ones", icon="ERROR")
+            warn.label(text="could not be read. Replace them.")
         if t == "ENUM":
             col.prop(e, "enum_style")
             box = col.box()

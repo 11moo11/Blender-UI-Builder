@@ -91,6 +91,37 @@ def _enum_info(rna):
     return pairs[:40]
 
 
+def _default_of(rna, cur, is_array, index):
+    """The property's declared default (not its current runtime value, which may be arbitrary state)."""
+    try:
+        if getattr(rna, "is_array", False):
+            d = tuple(rna.default_array)
+            return d[index] if index >= 0 else d
+        return rna.default
+    except Exception:
+        return cur
+
+
+def _dynamic_enum(data, name):
+    """Items of a callback-based EnumProperty, by calling the addon's own `items` function."""
+    try:
+        for klass in type(data).__mro__:
+            deferred = getattr(klass, "__annotations__", {}).get(name)
+            items = getattr(deferred, "keywords", {}).get("items") if deferred is not None else None
+            if items is None:
+                continue
+            if callable(items):
+                items = items(data, bpy.context)
+            pairs = [(i[0], _clean_name(i[1])) for i in items if len(i) >= 2 and _clean_name(i[1])]
+            return pairs[:40]
+    except Exception:
+        pass
+    return []
+
+
+PLACEHOLDER = "PLACEHOLDER_OPTION_%d"
+
+
 def _range(rna, fields, integer):
     try:
         lo, hi = rna.soft_min, rna.soft_max
@@ -119,6 +150,7 @@ def item_from_prop(data, name, text, icon, expand, slider, toggle, icon_only, in
             pass
     t, arr = rna.type, getattr(rna, "is_array", False) and index < 0
     n = rna.array_length if arr else 0
+    dflt = _default_of(rna, cur, arr, index)
 
     def done(type_id, **extra):
         f.update(extra)
@@ -129,26 +161,27 @@ def item_from_prop(data, name, text, icon, expand, slider, toggle, icon_only, in
             style = "TOGGLE" if toggle in (True, 1) else "CHECKBOX"
             if icon_only or (toggle in (True, 1) and text == "" and ic):
                 style = "ICON"
-            return done("BOOL", bool_style=style, bool_value=bool(cur))
+            return done("BOOL", bool_style=style, bool_value=bool(dflt))
         if t in ("INT", "FLOAT") and arr:
             sub = rna.subtype
+            vec = tuple(float(x) for x in dflt) if dflt else None
             if sub in ("COLOR", "COLOR_GAMMA") and n in (3, 4):
                 return done("COLOR", use_alpha=(n == 4),
-                            **({"color_alpha_value": tuple(cur)} if n == 4 and cur else
-                               {"color_value": tuple(cur)[:3]} if cur else {}))
+                            **({"color_alpha_value": vec} if n == 4 and vec else
+                               {"color_value": vec[:3]} if vec else {}))
             if sub == "EULER" and n == 3:
-                return done("EULER", euler_value=tuple(cur) if cur else (0, 0, 0))
+                return done("EULER", euler_value=vec or (0, 0, 0))
             if n == 2:
-                return done("VEC2", vec2_value=tuple(float(x) for x in cur) if cur else (0, 0))
+                return done("VEC2", vec2_value=vec or (0, 0))
             if n >= 3:
-                return done("VEC3", vec3_value=tuple(float(x) for x in cur)[:3] if cur else (0, 0, 0))
+                return done("VEC3", vec3_value=(vec or (0, 0, 0))[:3])
         if t == "INT":
-            fx = {"int_value": int(cur) if cur is not None else 0}
+            fx = {"int_value": int(dflt) if dflt is not None else 0}
             _range(rna, fx, True)
             return done("INT", **fx)
         if t == "FLOAT":
             sub = rna.subtype
-            v = float(cur) if cur is not None else 0.0
+            v = float(dflt) if dflt is not None else 0.0
             if sub == "FACTOR":
                 return done("SLIDER", slider_value=min(max(v, 0.0), 1.0))
             if sub == "PERCENTAGE":
@@ -165,24 +198,30 @@ def item_from_prop(data, name, text, icon, expand, slider, toggle, icon_only, in
         if t == "STRING":
             sub = rna.subtype
             if sub in ("FILE_PATH", "FILE_NAME"):
-                return done("FILEPATH", file_value=cur or "")
+                return done("FILEPATH", file_value=dflt or "")
             if sub == "DIR_PATH":
-                return done("DIRPATH", dir_value=cur or "")
-            return done("STRING", string_value=cur if isinstance(cur, str) else "")
+                return done("DIRPATH", dir_value=dflt or "")
+            return done("STRING", string_value=dflt if isinstance(dflt, str) else "")
         if t == "ENUM":
-            pairs = _enum_info(rna)
-            if not pairs and isinstance(cur, str) and cur:  # dynamic items: only the current one is known
-                pairs = [(cur, _pretty(cur))]
-                f["description"] = (f["description"] + " " if f["description"] else "") + \
-                    "(options are generated at runtime; edit the list)"
-            names = [n_ for _, n_ in pairs] or ["Option A", "Option B"]
+            pairs = _enum_info(rna) or _dynamic_enum(data, name)
+            current = cur if isinstance(cur, str) and cur else ""
+            if not pairs:
+                # The real options can't be read (generated at runtime). Say so in a way nobody can mistake
+                # for real data, instead of inventing plausible-looking options.
+                if current:
+                    pairs.append((current, _pretty(current)))
+                pairs += [("placeholder_%d" % k, PLACEHOLDER % k) for k in (1, 2)]
+                note = ("UNKNOWN OPTIONS: this list is generated at runtime and could not be read. "
+                        "Replace the PLACEHOLDER_OPTION entries with the real options.")
+                f["description"] = (f["description"] + " " if f["description"] else "") + note
+            names = [n_ for _, n_ in pairs]
             parsed = el.parse_enum_items(", ".join(names))
             fx = {"enum_items": ", ".join(names),
                   "enum_style": "EXPAND" if (expand or force == "TABS") else "DROPDOWN"}
-            if isinstance(cur, str):
-                for (ident_, _), (new_id, _) in zip(pairs, parsed):
-                    if ident_ == cur:
-                        fx["enum_value"] = new_id
+            want = dflt if isinstance(dflt, str) and dflt else current  # declared default first
+            for (ident_, _), (new_id, _) in zip(pairs, parsed):
+                if ident_ == want:
+                    fx["enum_value"] = new_id
             return done("MENU" if force == "MENU" else "ENUM", **fx)
         if t == "POINTER":
             ft = rna.fixed_type.identifier if rna.fixed_type else ""
@@ -349,7 +388,11 @@ class Rec:
                 pass
             self._ctx.depth -= 1
             names = [_clean_name(i.label) for i in _flatten(sub) if i.type in ("BUTTON", "LABEL") and i.label]
-        f = {"ident": menu, "enum_items": ", ".join(names[:30]) or "Option A, Option B"}
+        f = {"ident": menu, "enum_items": ", ".join(names[:30]) or
+             ", ".join("PLACEHOLDER_ITEM_%d" % k for k in (1, 2))}
+        if not names:
+            f["description"] = ("UNKNOWN ITEMS: the menu contents could not be read. "
+                                "Replace the PLACEHOLDER_ITEM entries with the real menu items.")
         if _icon(icon):
             f["icon"] = _icon(icon)
         self._add(Item("MENU", label, **f))

@@ -94,7 +94,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 4, 5), updater.local_version()
+    assert updater.local_version() == (1, 4, 6), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -253,7 +253,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 4, 5), updater.local_version()
+    assert updater.local_version() == (1, 4, 6), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -788,7 +788,66 @@ def test_branches():
     print("branches OK")
 
 
+def test_scrape():
+    from ui_builder import importer
+    from ui_builder.operators import new_element
+    from bpy.props import EnumProperty, FloatProperty, IntProperty, PointerProperty
+
+    def good(self, context):
+        return [("a", "Alpha", ""), ("b", "Beta", "")]
+
+    def broken(self, context):
+        raise RuntimeError("needs live data")
+
+    class SG(bpy.types.PropertyGroup):
+        dyn: EnumProperty(name="Dyn", items=good, default=None)
+        unknown: EnumProperty(name="Unknown", items=broken)
+        static: EnumProperty(name="Static", items=[("x", "Ex", ""), ("y", "Why", "")], default="y")
+        count: IntProperty(name="Count", default=3, min=1, max=9)
+        amount: FloatProperty(name="Amount", default=0.25, min=0, max=2)
+
+    class SCR_PT_main(bpy.types.Panel):
+        bl_label = "Scrape"; bl_idname = "SCR_PT_main"
+        bl_space_type = "VIEW_3D"; bl_region_type = "UI"; bl_category = "Scrape"
+
+        def draw(self, context):
+            g = context.scene.scr_props
+            for n in ("dyn", "unknown", "static", "count", "amount"):
+                self.layout.prop(g, n)
+
+    for c in (SG, SCR_PT_main):
+        bpy.utils.register_class(c)
+        c.__module__ = "scrapeaddon"
+    bpy.types.Scene.scr_props = PointerProperty(type=SG)
+    try:
+        g = bpy.context.scene.scr_props
+        g.count = -2  # runtime state must not leak into the imported default
+        item, err = importer.build_panel(importer.addon_panels("scrapeaddon")[0], importer.Ctx(bpy.context))
+        assert not err, err
+        by = {c.fields["ident"]: c for c in item.children}
+        assert by["dyn"].fields["enum_items"] == "Alpha, Beta", by["dyn"].fields   # callback evaluated
+        assert "PLACEHOLDER" not in by["dyn"].fields["enum_items"]
+        assert by["static"].fields["enum_items"] == "Ex, Why" and by["static"].fields["enum_value"] == "why"
+        unk = by["unknown"].fields
+        assert "PLACEHOLDER_OPTION_1" in unk["enum_items"] and "UNKNOWN OPTIONS" in unk["description"], unk
+        assert by["count"].fields["int_value"] == 3, by["count"].fields             # default, not the -2 state
+        assert by["amount"].fields["float_value"] == 0.25
+        s.elements.clear()
+        importer.commit(s, [item], new_element, tree.normalize)
+        llm = export.Exporter(s).llm()
+        assert "Placeholders - do not treat as real" in llm and "Do NOT guess" in llm, llm[:1500]
+        code = export.Exporter(s).python()
+        assert "placeholder_option_1" in code.lower() and "UNKNOWN OPTIONS" in code
+        compile(code, "<scrape>", "exec")
+    finally:
+        del bpy.types.Scene.scr_props
+        for c in (SCR_PT_main, SG):
+            bpy.utils.unregister_class(c)
+    print("scrape OK")
+
+
 check_icons()
+test_scrape()
 test_branches()
 test_multiselect()
 test_simplify()
