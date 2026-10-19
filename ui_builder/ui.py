@@ -123,8 +123,6 @@ def _pick_icon(layout, e):
     row = layout.row(align=True)
     icon = icons.valid_icon(e.icon)
     row.operator("ui_builder.pick_icon", text=e.icon if icon else "Pick Icon...", icon=icon or "VIEWZOOM")
-    if e.icon != "NONE":
-        row.prop(e, "icon", text="")
 
 
 def draw_element(layout, e):
