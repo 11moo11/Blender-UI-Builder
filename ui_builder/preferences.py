@@ -11,7 +11,11 @@ class UIB_Preferences(bpy.types.AddonPreferences):
 
     repo: StringProperty(name="GitHub Repository", default=updater.DEFAULT_REPO,
                          description="owner/name of the repository to update from")
-    branch: StringProperty(name="Branch", default=updater.DEFAULT_BRANCH)
+    branch: StringProperty(name="Branch", default=updater.DEFAULT_BRANCH,
+                           description="Falls back to the repository's default branch if this one does not exist")
+    token: StringProperty(name="Access Token", subtype="PASSWORD",
+                          description="Only needed for private repositories: a GitHub token with read access to "
+                                      "repository contents. Stored in your Blender preferences")
     auto_check: BoolProperty(name="Check for updates on startup", default=True)
     auto_reload: BoolProperty(name="Reload scripts after updating", default=True,
                               description="Run Reload Scripts automatically once an update is installed")
@@ -34,6 +38,7 @@ def draw_update_box(layout, prefs, compact=False):
         col = box.column()
         col.prop(prefs, "repo")
         col.prop(prefs, "branch")
+        col.prop(prefs, "token")
         col.prop(prefs, "auto_check")
         col.prop(prefs, "auto_reload")
     if st.message:
@@ -41,9 +46,11 @@ def draw_update_box(layout, prefs, compact=False):
                 "UP_TO_DATE": "CHECKMARK"}.get(st.status, "TIME")
         box.label(text=st.message, icon=icon)
     row = box.row(align=True)
-    row.enabled = not st.busy
-    row.operator("ui_builder.check_update", icon="FILE_REFRESH")
     sub = row.row(align=True)
+    sub.enabled = not st.busy
+    sub.operator("ui_builder.check_update", icon="FILE_REFRESH")
+    sub = row.row(align=True)
+    sub.enabled = st.status == st.AVAILABLE
     sub.alert = st.status == st.AVAILABLE
     sub.operator("ui_builder.install_update", icon="IMPORT",
                  text="Install %s" % updater.fmt_version(st.remote_version)
@@ -59,7 +66,8 @@ class UIB_OT_check_update(bpy.types.Operator):
 
     def execute(self, context):
         p = get_prefs(context)
-        updater.check_async(p.repo if p else updater.DEFAULT_REPO, p.branch if p else updater.DEFAULT_BRANCH)
+        updater.check_async(p.repo if p else updater.DEFAULT_REPO, p.branch if p else updater.DEFAULT_BRANCH,
+                            p.token if p else "")
         return {"FINISHED"}
 
 
@@ -67,6 +75,10 @@ class UIB_OT_install_update(bpy.types.Operator):
     """Download the latest version from GitHub and replace the installed files"""
     bl_idname = "ui_builder.install_update"
     bl_label = "Update Now"
+
+    @classmethod
+    def poll(cls, context):
+        return updater.STATE.status == updater.State.AVAILABLE
 
     def invoke(self, context, event):
         p = get_prefs(context)
@@ -78,7 +90,7 @@ class UIB_OT_install_update(bpy.types.Operator):
         p = get_prefs(context)
         repo = p.repo if p else updater.DEFAULT_REPO
         branch = p.branch if p else updater.DEFAULT_BRANCH
-        updater.install_async(repo, branch)
+        updater.install_async(repo, branch, p.token if p else "")
         if p and p.auto_reload:
             bpy.app.timers.register(_reload_when_done, first_interval=1.0)
         return {"FINISHED"}
@@ -106,7 +118,7 @@ class UIB_OT_reload_scripts(bpy.types.Operator):
 def _startup_check():
     p = get_prefs()
     if p and p.auto_check and updater.online_allowed():
-        updater.check_async(p.repo, p.branch)
+        updater.check_async(p.repo, p.branch, p.token)
     return None
 
 

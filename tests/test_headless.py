@@ -78,7 +78,7 @@ def test_updater():
     open(os.path.join(fake_addon, "__init__.py"), "w").write('bl_info = {"version": (1, 0, 0)}\n')
     open(os.path.join(fake_addon, "stale.py"), "w").write("old")
     real_dir, real_dl = updater.ADDON_DIR, updater._download
-    updater.ADDON_DIR, updater._download = fake_addon, lambda url, limit: data
+    updater.ADDON_DIR, updater._download = fake_addon, lambda url, limit, token="", raw=False: data
     try:
         updater.install_from_github("owner/repo", "main")
     finally:
@@ -237,7 +237,7 @@ def test_updater():
     open(os.path.join(fake_addon, "__init__.py"), "w").write('bl_info = {"version": (1, 0, 0)}\n')
     open(os.path.join(fake_addon, "stale.py"), "w").write("old")
     real_dir, real_dl = updater.ADDON_DIR, updater._download
-    updater.ADDON_DIR, updater._download = fake_addon, lambda url, limit: data
+    updater.ADDON_DIR, updater._download = fake_addon, lambda url, limit, token="", raw=False: data
     try:
         updater.install_from_github("owner/repo", "main")
     finally:

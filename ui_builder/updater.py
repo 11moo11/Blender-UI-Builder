@@ -13,6 +13,7 @@ import sys
 import tempfile
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
 import zipfile
 
@@ -38,14 +39,17 @@ class State:
         self.status = self.IDLE
         self.message = ""
         self.remote_version = None
+        self.branch = ""  # branch the last successful check used
         self._lock = threading.Lock()
 
-    def set(self, status, message="", remote_version=None):
+    def set(self, status, message="", remote_version=None, branch=None):
         with self._lock:
             self.status = status
             self.message = message
             if remote_version is not None:
                 self.remote_version = remote_version
+            if branch is not None:
+                self.branch = branch
 
     @property
     def busy(self):
@@ -75,8 +79,13 @@ def _validate(repo, branch):
         raise ValueError("Invalid branch name")
 
 
-def _download(url, limit):
-    req = urllib.request.Request(url, headers={"User-Agent": "blender-ui-builder-updater"})
+def _download(url, limit, token="", raw=False):
+    headers = {"User-Agent": "blender-ui-builder-updater", "Accept": "application/vnd.github+json"}
+    if raw:
+        headers["Accept"] = "application/vnd.github.raw+json"
+    if token:
+        headers["Authorization"] = "Bearer " + token
+    req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=20) as resp:
         data = resp.read(limit + 1)
     if len(data) > limit:
@@ -84,10 +93,32 @@ def _download(url, limit):
     return data
 
 
-def fetch_remote_version(repo, branch):
-    _validate(repo, branch)
-    url = "https://raw.githubusercontent.com/%s/%s/%s/__init__.py" % (repo, branch, SOURCE_FOLDER)
-    text = _download(url, 512 * 1024).decode("utf-8", "replace")
+def default_branch(repo, token=""):
+    import json
+    data = _download("https://api.github.com/repos/%s" % repo, 512 * 1024, token)
+    return json.loads(data.decode("utf-8")).get("default_branch") or ""
+
+
+def resolve_branch(repo, branch, token=""):
+    """Branch to use: the configured one if it exists, else the repository's default branch."""
+    if branch:
+        try:
+            fetch_remote_version(repo, branch, token)
+            return branch
+        except urllib.error.HTTPError as e:
+            if e.code != 404:
+                raise
+    fallback = default_branch(repo, token)
+    if not fallback:
+        raise ValueError("Repository '%s' was not found or has no branches" % repo)
+    return fallback
+
+
+def fetch_remote_version(repo, branch, token=""):
+    _validate(repo, branch or "main")
+    url = "https://api.github.com/repos/%s/contents/%s/__init__.py?ref=%s" % (
+        repo, SOURCE_FOLDER, urllib.parse.quote(branch, safe=""))
+    text = _download(url, 512 * 1024, token, raw=True).decode("utf-8", "replace")
     m = _VERSION_RE.search(text)
     if not m:
         raise ValueError("Could not read a version from the repository")
@@ -126,11 +157,11 @@ def _managed_files(root):
     return found
 
 
-def install_from_github(repo, branch):
+def install_from_github(repo, branch, token=""):
     """Download and apply the update. Raises on failure (installed files are rolled back)."""
-    _validate(repo, branch)
-    url = "https://github.com/%s/archive/refs/heads/%s.zip" % (repo, branch)
-    data = _download(url, MAX_ZIP_BYTES)
+    _validate(repo, branch or "main")
+    url = "https://api.github.com/repos/%s/zipball/%s" % (repo, urllib.parse.quote(branch, safe=""))
+    data = _download(url, MAX_ZIP_BYTES, token)
     work = tempfile.mkdtemp(prefix="uib_update_")
     try:
         new_dir = os.path.join(work, "new")
@@ -179,7 +210,7 @@ def _start(target):
     bpy.app.timers.register(_watch, first_interval=0.3)
 
 
-def check_async(repo, branch):
+def check_async(repo, branch, token=""):
     if STATE.busy:
         return
     if not online_allowed():
@@ -189,20 +220,26 @@ def check_async(repo, branch):
 
     def job():
         try:
-            remote = fetch_remote_version(repo, branch)
+            used = resolve_branch(repo, branch, token)
+            remote = fetch_remote_version(repo, used, token)
+            note = "" if used == branch else " (branch '%s' not found, using '%s')" % (branch, used)
             if remote > local_version():
-                STATE.set(State.AVAILABLE, "Version %s is available." % fmt_version(remote), remote)
+                STATE.set(State.AVAILABLE, "Version %s is available.%s" % (fmt_version(remote), note), remote, used)
             else:
-                STATE.set(State.UP_TO_DATE, "You have the latest version.", remote)
+                STATE.set(State.UP_TO_DATE, "You have the latest version (%s).%s" % (
+                    fmt_version(local_version()), note), remote, used)
         except urllib.error.HTTPError as e:
-            STATE.set(State.ERROR, "GitHub returned %s. Check the repository and branch." % e.code)
+            hint = ("" if token else " If the repository is private, add a GitHub access token in the addon "
+                                     "preferences.")
+            STATE.set(State.ERROR, "GitHub returned %s for '%s'. It needs ui_builder/__init__.py on that "
+                                   "branch.%s" % (e.code, branch or "default branch", hint))
         except Exception as e:
             STATE.set(State.ERROR, "Update check failed: %s" % e)
 
     _start(job)
 
 
-def install_async(repo, branch):
+def install_async(repo, branch, token=""):
     if STATE.busy:
         return
     if not online_allowed():
@@ -212,10 +249,10 @@ def install_async(repo, branch):
 
     def job():
         try:
-            install_from_github(repo, branch)
+            install_from_github(repo, STATE.branch or branch, token)
             STATE.set(State.INSTALLED, "Updated. Reload scripts or restart Blender to finish.")
         except urllib.error.HTTPError as e:
-            STATE.set(State.ERROR, "GitHub returned %s. Check the repository and branch." % e.code)
+            STATE.set(State.ERROR, "GitHub returned %s while downloading. Check the repository, branch and token." % e.code)
         except Exception as e:
             STATE.set(State.ERROR, "Update failed: %s" % e)
 
