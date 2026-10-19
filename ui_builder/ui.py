@@ -11,6 +11,8 @@ class UIB_UL_elements(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         d = el.DEFS.get(item.type)
         row = layout.row(align=True)
+        row.prop(item, "selected", text="", emboss=False,
+                 icon="CHECKBOX_HLT" if item.selected else "CHECKBOX_DEHLT")
         for _ in range(item.indent):
             row.label(text="", icon="BLANK1")
         row.label(text="", icon=d.icon if d else "QUESTION")
@@ -45,6 +47,17 @@ class UIB_MT_add(bpy.types.Menu):
     def draw(self, context):
         for category, title, icon, menu in _add_menus:
             self.layout.menu(menu.__name__, text=title, icon=icon)
+
+
+class UIB_MT_select(bpy.types.Menu):
+    bl_label = "Select"
+
+    def draw(self, context):
+        l = self.layout
+        for action, text, icon in (("ALL", "All", "CHECKBOX_HLT"), ("NONE", "None", "CHECKBOX_DEHLT"),
+                                   ("INVERT", "Invert", "ARROW_LEFTRIGHT"), ("CHILDREN", "Add Children", "OUTLINER"),
+                                   ("SIBLINGS", "Same Level", "ALIGN_JUSTIFY")):
+            l.operator("ui_builder.select", text=text, icon=icon).action = action
 
 
 class UIB_MT_project(bpy.types.Menu):
@@ -84,6 +97,8 @@ class UIB_PT_main(bpy.types.Panel):
         row = layout.row()
         row.template_list("UIB_UL_elements", "", s, "elements", s, "active_index", rows=8)
         col = row.column(align=True)
+        col.menu("UIB_MT_select", icon="RESTRICT_SELECT_OFF", text="")
+        col.separator()
         col.operator("ui_builder.remove", icon="REMOVE", text="")
         col.operator("ui_builder.duplicate", icon="DUPLICATE", text="")
         col.separator()
@@ -343,5 +358,5 @@ class UIB_PT_update(bpy.types.Panel):
             preferences.draw_update_box(self.layout, prefs, compact=True)
 
 
-classes = (UIB_UL_elements, *[m for _, _, _, m in _add_menus], UIB_MT_add, UIB_MT_project,
+classes = (UIB_UL_elements, *[m for _, _, _, m in _add_menus], UIB_MT_add, UIB_MT_select, UIB_MT_project,
            UIB_PT_main, UIB_PT_element, UIB_PT_location, UIB_PT_export, UIB_PT_import, UIB_PT_update)

@@ -94,7 +94,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 2, 5), updater.local_version()
+    assert updater.local_version() == (1, 3, 0), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -253,7 +253,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 2, 5), updater.local_version()
+    assert updater.local_version() == (1, 3, 0), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -525,7 +525,88 @@ def test_simplify():
     print("simplify OK")
 
 
+def test_multiselect():
+    from ui_builder.operators import new_element
+    s.elements.clear()
+
+    def build(spec):
+        s.elements.clear()
+        for typ, label, indent in spec:
+            new_element(s, typ, len(s.elements), indent, label)
+        for e in s.elements:
+            e.selected = False
+
+    def sel(*labels):
+        for e in s.elements:
+            e.selected = e.label in labels
+
+    def order():
+        return [e.label for e in s.elements]
+
+    def levels():
+        return [(e.label, e.indent) for e in s.elements]
+
+    build([("PANEL", "P", 0)] + [("LABEL", n, 1) for n in "abcd"])
+    sel("b", "c"); s.active_index = 2
+    bpy.ops.ui_builder.move(direction="UP")
+    assert order() == ["P", "b", "c", "a", "d"], order()
+    assert s.elements[s.active_index].label == "b"
+    assert bpy.ops.ui_builder.move(direction="UP") == {"CANCELLED"}  # already at the top of the panel
+    assert order() == ["P", "b", "c", "a", "d"]
+    bpy.ops.ui_builder.move(direction="DOWN")
+    assert order() == ["P", "a", "b", "c", "d"], order()
+    # non-adjacent selection moves independently
+    sel("a", "c")
+    bpy.ops.ui_builder.move(direction="DOWN")
+    assert order() == ["P", "b", "a", "d", "c"], order()
+    bpy.ops.ui_builder.move(direction="DOWN")  # c is blocked at the bottom, a still moves past d
+    assert order() == ["P", "b", "d", "a", "c"], order()
+    # selection survives; no selection falls back to the active element
+    sel(); s.active_index = 1
+    bpy.ops.ui_builder.move(direction="DOWN")
+    assert order() == ["P", "d", "b", "a", "c"], order()
+    assert not any(e.selected for e in s.elements)
+
+    # container + children move together, selected children inside it are not moved twice
+    build([("PANEL", "P", 0), ("LABEL", "a", 1), ("ROW", "R", 1), ("LABEL", "r1", 2), ("LABEL", "r2", 2),
+           ("LABEL", "z", 1)])
+    sel("R", "r1"); s.active_index = 2
+    bpy.ops.ui_builder.move(direction="UP")
+    assert order() == ["P", "R", "r1", "r2", "a", "z"], order()
+
+    # nesting several at once, order preserved both ways
+    build([("PANEL", "P", 0), ("ROW", "C", 1), ("LABEL", "x", 1), ("LABEL", "y", 1), ("LABEL", "w", 1)])
+    sel("x", "y"); s.active_index = 2
+    bpy.ops.ui_builder.indent(direction="IN")
+    assert levels() == [("P", 0), ("C", 1), ("x", 2), ("y", 2), ("w", 1)], levels()
+    bpy.ops.ui_builder.indent(direction="OUT")
+    assert levels() == [("P", 0), ("C", 1), ("x", 1), ("y", 1), ("w", 1)], levels()
+
+    # duplicate / remove several
+    sel("x", "y")
+    bpy.ops.ui_builder.duplicate()
+    assert order() == ["P", "C", "x", "y", "x", "y", "w"], order()
+    assert [e.selected for e in s.elements] == [False, False, False, False, True, True, False]
+    bpy.ops.ui_builder.remove()
+    assert order() == ["P", "C", "x", "y", "w"], order()
+
+    # select menu actions
+    bpy.ops.ui_builder.select(action="ALL")
+    assert all(e.selected for e in s.elements)
+    bpy.ops.ui_builder.select(action="INVERT")
+    assert not any(e.selected for e in s.elements)
+    s.active_index = 2
+    bpy.ops.ui_builder.select(action="SIBLINGS")
+    assert [e.label for e in s.elements if e.selected] == ["C", "x", "y", "w"]
+    bpy.ops.ui_builder.select(action="NONE")
+    assert not any(e.selected for e in s.elements)
+    from ui_builder import ui
+    ui.UIB_UL_elements.draw_item(types.SimpleNamespace(layout_type="DEFAULT"), bpy.context, FakeLayout([]), None, s.elements[0], 0, None, "", 0)
+    print("multiselect OK")
+
+
 check_icons()
+test_multiselect()
 test_simplify()
 test_locations()
 test_builder_ui()

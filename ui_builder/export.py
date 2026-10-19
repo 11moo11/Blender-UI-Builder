@@ -601,7 +601,7 @@ _SETTING_KEYS = ("addon_name", "author", "prefix", "blender_min", "placement", "
 
 
 def _skip(p):
-    return p.identifier == "rna_type" or p.is_readonly or p.type in {"POINTER", "COLLECTION"}
+    return p.identifier in ("rna_type", "selected", "marker") or p.is_readonly or p.type in {"POINTER", "COLLECTION"}
 
 
 def _element_dict(e):

@@ -1,5 +1,7 @@
 """Operators that edit the element list."""
 
+import contextlib
+
 import bpy
 from bpy.props import BoolProperty, EnumProperty, StringProperty
 
@@ -79,24 +81,71 @@ class UIB_OT_add(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class UIB_OT_remove(bpy.types.Operator):
-    """Remove the active element and everything inside it"""
-    bl_idname = "ui_builder.remove"
-    bl_label = "Remove Element"
-    bl_options = {"REGISTER", "UNDO"}
+@contextlib.contextmanager
+def operand(s):
+    """Make sure the elements an operator acts on carry `selected` (falls back to the active one)
+    and keep the active row pointing at the same element afterwards."""
+    elems = s.elements
+    temp = None
+    if not any(e.selected for e in elems) and 0 <= s.active_index < len(elems):
+        temp = s.active_index
+        elems[temp].selected = True
+    if 0 <= s.active_index < len(elems):
+        elems[s.active_index].marker = True
+    try:
+        yield
+    finally:
+        elems = s.elements
+        for i, e in enumerate(elems):
+            if e.marker:
+                s.active_index = i
+                e.marker = False
+        if temp is not None:
+            for e in elems:
+                e.selected = False
 
+
+def _tops(elems):
+    """Start index of every selected block that is not inside another selected block."""
+    tops, i = [], 0
+    while i < len(elems):
+        if elems[i].selected:
+            tops.append(i)
+            i = tree.block_end(elems, i)
+        else:
+            i += 1
+    return tops
+
+
+def _prev_sibling(elems, a):
+    indent = elems[a].indent
+    p = a - 1
+    while p >= 0 and elems[p].indent > indent:
+        p -= 1
+    return p if p >= 0 and elems[p].indent == indent else None
+
+
+class _ElementOp(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         s = settings(context)
-        return 0 <= s.active_index < len(s.elements)
+        return len(s.elements) > 0
+
+
+class UIB_OT_remove(_ElementOp):
+    """Remove the selected elements (or the active one) and everything inside them"""
+    bl_idname = "ui_builder.remove"
+    bl_label = "Remove Elements"
+    bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
         s = settings(context)
-        i = s.active_index
-        end = tree.block_end(s.elements, i)
-        for _ in range(end - i):
-            s.elements.remove(i)
-        s.active_index = max(0, min(i, len(s.elements)) - 1) if len(s.elements) else 0
+        with operand(s):
+            for a in reversed(_tops(s.elements)):
+                end = tree.block_end(s.elements, a)
+                for _ in range(end - a):
+                    s.elements.remove(a)
+        s.active_index = max(0, min(s.active_index, len(s.elements) - 1))
         _redraw(context)
         return {"FINISHED"}
 
@@ -111,112 +160,161 @@ def _copy_props(src, dst):
             pass
 
 
-class UIB_OT_duplicate(bpy.types.Operator):
-    """Duplicate the active element and everything inside it"""
+class UIB_OT_duplicate(_ElementOp):
+    """Duplicate the selected elements (or the active one) with everything inside them"""
     bl_idname = "ui_builder.duplicate"
-    bl_label = "Duplicate Element"
+    bl_label = "Duplicate Elements"
     bl_options = {"REGISTER", "UNDO"}
-
-    @classmethod
-    def poll(cls, context):
-        return UIB_OT_remove.poll(context)
 
     def execute(self, context):
         s = settings(context)
-        i = s.active_index
-        end = tree.block_end(s.elements, i)
-        n = end - i
-        for k in range(n):
-            s.elements.add()  # may reallocate, so look elements up by index afterwards
-            _copy_props(s.elements[i + k], s.elements[len(s.elements) - 1])
-            s.elements.move(len(s.elements) - 1, end + k)
-        s.active_index = end
+        first_copy = None
+        with operand(s):
+            elems = s.elements
+            runs = []  # contiguous groups of selected blocks are copied together, as one group
+            for a in _tops(elems):
+                end = tree.block_end(elems, a)
+                if runs and runs[-1][1] == a:
+                    runs[-1][1] = end
+                else:
+                    runs.append([a, end])
+            for a, end in reversed(runs):
+                for k in range(end - a):
+                    elems.add()  # may reallocate, so look elements up by index afterwards
+                    _copy_props(elems[a + k], elems[len(elems) - 1])
+                    elems.move(len(elems) - 1, end + k)
+                    elems[end + k].marker = False
+                for k in range(a, end):
+                    elems[k].selected = False  # the copies stay selected
+                first_copy = end
+        if first_copy is not None:
+            s.active_index = first_copy
         _redraw(context)
         return {"FINISHED"}
 
 
-class UIB_OT_move(bpy.types.Operator):
-    """Move the active element (with its children) among its siblings"""
+class UIB_OT_move(_ElementOp):
+    """Move the selected elements (with their children) among their siblings"""
     bl_idname = "ui_builder.move"
-    bl_label = "Move Element"
+    bl_label = "Move Elements"
     bl_options = {"REGISTER", "UNDO"}
 
     direction: EnumProperty(items=[("UP", "Up", ""), ("DOWN", "Down", "")])
 
-    @classmethod
-    def poll(cls, context):
-        return UIB_OT_remove.poll(context)
-
     def execute(self, context):
         s = settings(context)
-        elems = s.elements
-        a = s.active_index
-        b = tree.block_end(elems, a)
-        indent = elems[a].indent
-        if self.direction == "UP":
-            p = a - 1
-            while p >= 0 and elems[p].indent > indent:
-                p -= 1
-            if p < 0 or elems[p].indent < indent:
-                return {"CANCELLED"}
-            for k in range(b - a):
-                elems.move(a + k, p + k)
-            s.active_index = p
-        else:
-            if b >= len(elems) or elems[b].indent < indent:
-                return {"CANCELLED"}
-            c = tree.block_end(elems, b)
-            for k in range(c - b):
-                elems.move(b + k, a + k)
-            s.active_index = a + (c - b)
+        moved = False
+        with operand(s):
+            elems = s.elements
+            tops = _tops(elems)
+            blocked = set()  # starts of blocks that could not move (neighbours must not jump over them)
+            if self.direction == "UP":
+                for a in tops:
+                    b = tree.block_end(elems, a)
+                    p = _prev_sibling(elems, a)
+                    if p is None or p in blocked:
+                        blocked.add(a)
+                        continue
+                    for k in range(b - a):
+                        elems.move(a + k, p + k)
+                    moved = True
+            else:
+                for a in reversed(tops):
+                    b = tree.block_end(elems, a)
+                    if b >= len(elems) or elems[b].indent != elems[a].indent or b in blocked:
+                        blocked.add(a)
+                        continue
+                    c = tree.block_end(elems, b)
+                    for k in range(c - b):
+                        elems.move(b + k, a + k)
+                    moved = True
         _redraw(context)
-        return {"FINISHED"}
+        return {"FINISHED"} if moved else {"CANCELLED"}
 
 
-class UIB_OT_indent(bpy.types.Operator):
-    """Move the active element into the container above it, or back out of its container"""
+class UIB_OT_indent(_ElementOp):
+    """Move the selected elements into the container above them, or back out of their container"""
     bl_idname = "ui_builder.indent"
     bl_label = "Change Nesting"
     bl_options = {"REGISTER", "UNDO"}
 
     direction: EnumProperty(items=[("IN", "Into container above", ""), ("OUT", "Out of container", "")])
 
-    @classmethod
-    def poll(cls, context):
-        return UIB_OT_remove.poll(context)
+    def execute(self, context):
+        s = settings(context)
+        changed = 0
+        with operand(s):
+            elems = s.elements
+            tops = _tops(elems)
+            if self.direction == "IN":
+                for a in tops:
+                    b = tree.block_end(elems, a)
+                    p = _prev_sibling(elems, a)
+                    if p is None or not el.DEFS[elems[p].type].container:
+                        continue
+                    for k in range(a, b):
+                        elems[k].indent += 1
+                    changed += 1
+            else:
+                for a in reversed(tops):  # last first, so the original order is kept
+                    b = tree.block_end(elems, a)
+                    indent = elems[a].indent
+                    if indent == 0:
+                        continue
+                    parent = a - 1
+                    while parent >= 0 and elems[parent].indent >= indent:
+                        parent -= 1
+                    target = tree.block_end(elems, parent)
+                    if target > b:  # move behind the parent's block so later siblings stay put
+                        for _ in range(b - a):
+                            elems.move(a, target - 1)
+                        a, b = target - (b - a), target
+                    for k in range(a, b):
+                        elems[k].indent -= 1
+                    changed += 1
+            tree.normalize(elems)
+        if not changed:
+            self.report({"INFO"}, "Nothing to nest here: put a container (Row, Box, Panel...) right above "
+                                  "to move into it" if self.direction == "IN" else "Already at the top level")
+            return {"CANCELLED"}
+        _redraw(context)
+        return {"FINISHED"}
+
+
+class UIB_OT_select(bpy.types.Operator):
+    """Change which elements are ticked (ticked elements are moved / nested / deleted together)"""
+    bl_idname = "ui_builder.select"
+    bl_label = "Select Elements"
+    bl_options = {"REGISTER", "UNDO"}
+
+    action: EnumProperty(items=[
+        ("ALL", "All", "Tick every element"),
+        ("NONE", "None", "Untick everything"),
+        ("INVERT", "Invert", "Flip every tick"),
+        ("CHILDREN", "Add Children", "Also tick everything inside the ticked containers"),
+        ("SIBLINGS", "Same Level", "Tick every element at the active element's nesting level")])
 
     def execute(self, context):
         s = settings(context)
         elems = s.elements
-        a = s.active_index
-        b = tree.block_end(elems, a)
-        indent = elems[a].indent
-        if self.direction == "IN":
-            p = a - 1
-            while p >= 0 and elems[p].indent > indent:
-                p -= 1
-            if p < 0 or elems[p].indent != indent or not el.DEFS[elems[p].type].container:
-                self.report({"INFO"}, "Put a container (Row, Box, Panel...) right above to move into it")
-                return {"CANCELLED"}
-            delta = 1
-        else:
-            if indent == 0:
-                return {"CANCELLED"}
-            # Move behind the parent's block so following siblings stay put.
-            parent = a - 1
-            while parent >= 0 and elems[parent].indent >= indent:
-                parent -= 1
-            target = tree.block_end(elems, parent)
-            if target > b:
-                for _ in range(b - a):
-                    elems.move(a, target - 1)
-                a = target - (b - a)
-                b = target
-            delta = -1
-        for k in range(a, b):
-            elems[k].indent += delta
-        s.active_index = a
-        tree.normalize(elems)
+        if self.action == "ALL":
+            for e in elems:
+                e.selected = True
+        elif self.action == "NONE":
+            for e in elems:
+                e.selected = False
+        elif self.action == "INVERT":
+            for e in elems:
+                e.selected = not e.selected
+        elif self.action == "CHILDREN":
+            chosen = [i for i, e in enumerate(elems) if e.selected]
+            for i in chosen:
+                for k in range(i, tree.block_end(elems, i)):
+                    elems[k].selected = True
+        elif self.action == "SIBLINGS" and 0 <= s.active_index < len(elems):
+            level = elems[s.active_index].indent
+            for e in elems:
+                e.selected = e.indent == level
         _redraw(context)
         return {"FINISHED"}
 
@@ -249,7 +347,8 @@ class UIB_OT_pick_icon(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return UIB_OT_remove.poll(context)
+        s = settings(context)
+        return 0 <= s.active_index < len(s.elements)
 
     def invoke(self, context, event):
         context.window_manager.invoke_search_popup(self)
@@ -268,5 +367,5 @@ def _redraw(context):
             area.tag_redraw()
 
 
-classes = (UIB_OT_add, UIB_OT_remove, UIB_OT_duplicate, UIB_OT_move, UIB_OT_indent,
+classes = (UIB_OT_add, UIB_OT_remove, UIB_OT_duplicate, UIB_OT_move, UIB_OT_indent, UIB_OT_select,
            UIB_OT_clear, UIB_OT_pick_icon)

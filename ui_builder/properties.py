@@ -52,6 +52,9 @@ class UIB_Element(bpy.types.PropertyGroup):
     icon: StringProperty(name="Icon", default="NONE")
     indent: IntProperty(default=0, min=0)
     expanded: BoolProperty(name="Expanded", default=True)
+    selected: BoolProperty(name="Select", description="Tick to act on several elements at once. Click and "
+                                                      "drag over the checkboxes to tick many", default=False)
+    marker: BoolProperty(default=False, options={"SKIP_SAVE"})  # internal: tracks the active row
 
     # Where it lives in the Blender window
     panel_placement: EnumProperty(
