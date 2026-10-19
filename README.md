@@ -1,0 +1,65 @@
+# Blender UI Builder
+
+Design the interface of a Blender addon *before* you write it. Add every modern Blender UI
+element, rename it, see a live mockup, then export real code — for yourself, or as a prompt
+for an LLM to wire up.
+
+Targets Blender 3.6+ (exports can target 2.93+). Only tested headless on Blender 5.2 so far — see Development.
+
+## Install
+
+1. Run `python tools/build_zip.py` (or zip the `ui_builder/` folder yourself).
+2. Blender: **Edit > Preferences > Add-ons > Install…** (4.2+: *Install from Disk*) and pick `dist/ui_builder.zip`.
+3. Enable **UI Builder**.
+
+## Use
+
+Open the 3D Viewport sidebar (`N`) and pick the **UI Builder** tab.
+
+| Step | How |
+|---|---|
+| Add elements | **Add Element** menu (Layout, Text, Properties, Buttons & Menus, Templates). New elements go *inside* the selected container, or after the selected element. |
+| Rename | Double-click the name in the list, or edit it under **Selected Element**. |
+| Nest | Arrow buttons next to the list: ↑↓ reorder (children move with their parent), → moves into the container above, ← moves out. |
+| Tweak | **Selected Element**: icon picker, tooltip, default value, options, and layout modifiers (enabled, active, alert, scale, emboss, alignment). |
+| Preview | The **Mockup** tab (3D Viewport sidebar) and the **Scene** tab of the Properties editor draw the UI with real Blender widgets. Buttons are inert placeholders. |
+| Export | **Export** panel: choose a format, then *Text Editor*, *Copy* or *Save…*. |
+
+New to it? **Project menu (▾ in the header) > Load Example**.
+
+### Elements
+
+- **Layout:** Panel, Sub-panel, Collapsible Box, Row, Column, Box, Split, Grid, Separator, Spacer
+- **Text:** Label, Text Block
+- **Properties:** Checkbox / Toggle, Integer, Float, Slider, Factor, Percentage, Angle, Distance, Text, File path, Folder path, Dropdown / Expanded / Tabs, Color, Color + Alpha, Vector 2D/3D, Euler, Data-block pointer, Search field
+- **Buttons & Menus:** Button (operator), Dropdown Menu, Popover
+- **Templates:** List (UIList), Data-block selector (`template_ID`), Color wheel, Progress bar
+
+### Export formats
+
+- **Python Addon** – one complete file: `bl_info`, a `PropertyGroup` with a typed property per control (your current values become defaults), a `Panel` per panel / sub-panel, operator stubs for buttons (marked `TODO`), menus, UILists, popovers, and `register()`.
+- **LLM Prompt** – Markdown containing a UI outline, a property table, the operators to implement and the generated code, with a spot to describe the behaviour you want. Paste it into an LLM.
+- **JSON Layout** – save the project and load it again (**Project menu > Import**).
+
+Names become identifiers (`Render Still` → `render_still`); duplicates are numbered on export. Set the addon name, prefix, placement (3D Viewport, Properties tabs, Image/Node/Sequencer/Text/Clip editors) and tab name in the Export panel.
+
+## Updating from GitHub
+
+The addon updates itself from this repository:
+
+- On startup (and via **Preferences > Add-ons > UI Builder** or the *Updates* panel) it reads the version in `ui_builder/__init__.py` on the configured branch.
+- If the remote version is newer, an **Update available** banner appears. **Update Now** downloads the branch archive, replaces the addon files (rolling back on any error) and reloads scripts.
+- Repository and branch are configurable in the addon preferences (default `11moo11/Blender-UI-Builder`, branch `main`). Startup checks can be turned off. Nothing is sent except the request itself, and nothing happens without Blender's *Allow Online Access* enabled (4.2+).
+
+**To ship an update:** bump `version` in `ui_builder/__init__.py` (and `blender_manifest.toml`) and push to the update branch.
+
+> Updating downloads and runs code from the configured repository. Only point it at repositories you trust.
+
+## Development
+
+```
+python -m venv .venv && .venv/bin/pip install bpy
+.venv/bin/python -I tests/test_headless.py
+```
+
+The test registers the addon headless, drives the operators, validates every layout call in the preview *and* in the exported code against Blender's real `UILayout` API, executes the generated addon, round-trips the JSON, and tests the updater against a fake archive.

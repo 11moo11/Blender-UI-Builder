@@ -1,0 +1,16 @@
+schema_version = "1.0.0"
+
+id = "ui_builder"
+version = "1.0.0"
+name = "UI Builder"
+tagline = "Design add-on UI mockups and export them as code"
+maintainer = "11moo11"
+type = "add-on"
+website = "https://github.com/11moo11/Blender-UI-Builder"
+blender_version_min = "4.2.0"
+license = ["SPDX:GPL-3.0-or-later"]
+
+[permissions]
+network = "Check GitHub for new versions and download updates"
+files = "Replace the add-on's own files when updating"
+clipboard = "Copy generated code to the clipboard"
