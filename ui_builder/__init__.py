@@ -1,7 +1,7 @@
 bl_info = {
     "name": "UI Builder",
     "author": "11moo11",
-    "version": (1, 4, 1),
+    "version": (1, 4, 2),
     "blender": (3, 6, 0),
     "location": "3D Viewport > Sidebar > UI Builder",
     "description": "Design Blender addon UI mockups visually and export them as Python or an LLM prompt",

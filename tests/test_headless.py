@@ -94,7 +94,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 4, 1), updater.local_version()
+    assert updater.local_version() == (1, 4, 2), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -253,7 +253,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 4, 1), updater.local_version()
+    assert updater.local_version() == (1, 4, 2), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -493,6 +493,13 @@ def test_simplify():
             side.operator("object.select_all", text="", icon="INFO"); side.operator("object.select_all", text="", icon="ADD")
             r = layout.row(); r.scale_x = 0.3; r.label(text="Device:")
             r = layout.row(align=True); sub = r.row(); sub.enabled = False; sub.prop(p, "amount", text="")
+            c2 = layout.column(align=True)
+            c2.label(text="Quilt:")
+            c2.prop(p, "mode", text="")
+            c2.label(text="Other")
+            c2.prop(p, "mode")  # keeps its own name: not merged
+            r1 = layout.row(align=True); r1.scale_x = 0.3; r1.label(text="Device:")
+            r2 = layout.row(align=True); r2.scale_x = 0.7; r2.prop(p, "mode", text="")
 
     for c in (SP, SIM_PT_main):
         bpy.utils.register_class(c)
@@ -505,7 +512,15 @@ def test_simplify():
         got = shape(item)
         print("  simplified:", got)
         kinds = [c.type for c in item.children]
-        assert kinds == ["MENU" if False else "ENUM", "LIST", "IMAGE_PREVIEW", "LABEL", "ROW", "LABEL", "STRING" if False else "FLOAT"], kinds
+        assert kinds[:7] == ["ENUM", "LIST", "IMAGE_PREVIEW", "LABEL", "ROW", "LABEL", "FLOAT"], kinds
+        tail = item.children[7:]
+        # "Quilt:" label + empty-named Choice -> one Choice named Quilt with the label on the left
+        assert [c.type for c in tail] == ["COLUMN", "ENUM"], [c.type for c in tail]
+        col, row_enum = tail
+        assert [c.type for c in col.children] == ["ENUM", "LABEL", "ENUM"]
+        assert col.children[0].label == "Quilt" and col.children[0].fields["prop_split"] is True
+        assert col.children[2].label == "Mode" and "prop_split" not in col.children[2].fields
+        assert row_enum.label == "Device" and row_enum.fields["prop_split"] and "scale_x" not in row_enum.fields
         row = item.children[4]
         assert [c.type for c in row.children] == ["LIST", "COLUMN"] and row.children[1].fields["align"] is True
         assert item.children[5].fields["scale_x"] == 0.3

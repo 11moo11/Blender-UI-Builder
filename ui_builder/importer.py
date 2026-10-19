@@ -516,6 +516,28 @@ def _resolve(c, parent):
     return [c]
 
 
+def _merge_label_choice(items):
+    """A text label directly followed by an unlabelled Choice becomes one Choice with 'Label on the Left'."""
+    out, i = [], 0
+    while i < len(items):
+        a = items[i]
+        b = items[i + 1] if i + 1 < len(items) else None
+        if (a.type == "LABEL" and a.label.strip() and not a.children and b is not None
+                and b.type == "ENUM" and not b.label.strip()):
+            b.label = a.label.strip().rstrip(":").strip()
+            b.fields["prop_split"] = True
+            for k in ("scale_x", "scale_y"):  # widths only existed to line the two widgets up
+                b.fields.pop(k, None)
+            if a.fields.get("icon") and not b.fields.get("icon"):
+                b.fields["icon"] = a.fields["icon"]
+            out.append(b)
+            i += 2
+            continue
+        out.append(a)
+        i += 1
+    return out
+
+
 def simplify(item):
     """Remove empty / single-child / redundant nested rows and columns, and stray separators."""
     merged = []
@@ -523,7 +545,7 @@ def simplify(item):
         simplify(c)
         merged.extend(_resolve(c, item))
     out = []
-    for c in merged:
+    for c in _merge_label_choice(merged):
         if c.type == "SEPARATOR" and (not out or out[-1].type == "SEPARATOR"):
             continue
         out.append(c)
