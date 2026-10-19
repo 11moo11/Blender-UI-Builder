@@ -72,7 +72,7 @@ _DEFS = (
     Def("ENUM", "Choice (Dropdown / Buttons)", "PROPS", "COLLAPSEMENU", container=True, desc=True,
         help="Pick one value from a list (dropdown or row of buttons). Every option gets its own "
              "line item: put controls under an option to show them only when it is chosen."),
-    Def("OPTION", "Option", "PROPS", "RIGHTARROW_THIN", container=True, ident=False, icon_ok=False, hidden=True,
+    Def("OPTION", "Option", "PROPS", "RIGHTARROW_THIN", container=True, ident=False, icon_ok=True, hidden=True,
         help="One option of a Choice. Its children appear only while this option is selected."),
     Def("COLOR", "Color", "PROPS", "COLOR", desc=True, help="Color picker (tick Alpha for RGBA)."),
     Def("COLOR_ALPHA", "Color + Alpha (legacy)", "PROPS", "IMAGE_RGB_ALPHA", desc=True, hidden=True,
@@ -253,6 +253,11 @@ SPLIT_TYPES = ("BOOL", "INT", "FLOAT", "SLIDER", "FACTOR", "PERCENT", "ANGLE", "
                "FILEPATH", "DIRPATH", "ENUM", "COLOR", "COLOR_ALPHA", "VEC2", "VEC3", "EULER", "POINTER", "SEARCH")
 
 
+def wrap_needed(e, attrs):
+    """Whether a control must be drawn inside its own row (layout attributes, or side-by-side buttons)."""
+    return bool(attrs) or (e.type == "ENUM" and e.enum_style == "ROW")
+
+
 def wrapper_method(e):
     """Layout used to wrap a single control that needs layout attributes. Always a row: Blender only
     honours `alignment` on rows (a column wrapper silently ignored Alignment for split controls)."""
@@ -314,8 +319,10 @@ def leaf_specs(e, export=False):
         kw["slider"] = True
         return [Spec("prop", value, kw)]
     if t == "ENUM":
-        if e.enum_style == "EXPAND":
+        if e.enum_style in ("EXPAND", "ROW"):
             kw["expand"] = True
+            if e.enum_icon_only:
+                kw["icon_only"] = True
         return [Spec("prop", value, kw)]
     if t in ("INT", "FLOAT", "FACTOR", "PERCENT", "ANGLE", "DISTANCE", "STRING", "FILEPATH",
              "DIRPATH", "COLOR", "COLOR_ALPHA", "VEC2", "VEC3", "EULER", "POINTER"):

@@ -35,6 +35,10 @@ A **Choice** (dropdown or row of buttons) gets one **Option** row in the list fo
 
 Option rows stay in sync automatically: rename options and their contents stay with the same position, add an option and a new row appears, reorder the text and the rows follow. An option you delete that still has controls inside is kept and marked *(removed option)* until you delete or re-add it. Rows can be folded with the triangle at the start of a row. Controls added straight under the Choice itself (not under an option) are always shown.
 
+#### Choice as buttons
+
+A Choice can be a **Dropdown**, **Buttons (stacked)** (one above the other, like the expanded list in a sidebar) or **Buttons (side by side)** (one row). Tick **Icons Only** to show just the icons, and give each option an icon by selecting its Option row and using *Pick Icon*. Icons are used on the buttons and the dropdown entries, and exported in the enum items. The importer reads option icons and keeps the "this was in a row" information (a row holding one expanded dropdown becomes *side by side*), so a BlenderKit-style icon strip comes through intact.
+
 ### Where it lives
 
 Not everything is in a sidebar panel: a panel can sit in a header dropdown, the Image Editor or the Properties editor, and some things (a viewport overlay, a gizmo, a header button) aren't drawn by a panel at all. The **Where It Lives** panel shows this:

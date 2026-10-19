@@ -14,12 +14,18 @@ _VALUE_TIP = ("Mockup value. Blender cannot set tooltips per element at runtime,
 
 
 def _enum_value_items(self, context):
-    key = self.enum_items
+    from . import branches
+    icons = branches.option_icons(self, context)
+    key = (self.enum_items, tuple(sorted(icons.items())))
     items = _enum_cache.get(key)
     if items is None:
         if len(_enum_cache) > 2000:
             _enum_cache.clear()
-        items = [(ident, name, "") for ident, name in el.parse_enum_items(key)]
+        parsed = el.parse_enum_items(self.enum_items)
+        if icons:
+            items = [(ident, name, "", icons.get(ident, "NONE"), i) for i, (ident, name) in enumerate(parsed)]
+        else:
+            items = [(ident, name, "") for ident, name in parsed]
         _enum_cache[key] = items
     return items
 
@@ -113,7 +119,12 @@ class UIB_Element(bpy.types.PropertyGroup):
     bool_style: EnumProperty(name="Style", default="CHECKBOX", items=[
         ("CHECKBOX", "Checkbox", ""), ("TOGGLE", "Toggle Button", ""), ("ICON", "Icon Toggle", "Needs an icon")])
     enum_style: EnumProperty(name="Style", default="DROPDOWN", items=[
-        ("DROPDOWN", "Dropdown", ""), ("EXPAND", "Row of Buttons", "")])
+        ("DROPDOWN", "Dropdown", ""),
+        ("EXPAND", "Buttons (stacked)", "Buttons one above the other, like an expanded dropdown in a column"),
+        ("ROW", "Buttons (side by side)", "Buttons in one row")])
+    enum_icon_only: BoolProperty(name="Icons Only", description="Show only the icons of the options as buttons "
+                                 "(set an icon on each Option row)", default=False)
+    enum_icons: StringProperty(description="Option icons found by the importer, applied to new Option rows")
     enum_items: StringProperty(name="Options", update=_on_enum_items,
                                description="Comma separated option names. Each one gets its own row in the list",
                                default="Option A, Option B, Option C")

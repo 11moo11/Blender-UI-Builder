@@ -80,15 +80,16 @@ def _current(data, name):
 
 
 def _enum_info(rna):
-    pairs = []
+    """[(identifier, name, icon)] of a static enum."""
+    out = []
     try:
         for it in rna.enum_items:
             nm = _clean_name(it.name)
             if nm:
-                pairs.append((it.identifier, nm))
+                out.append((it.identifier, nm, getattr(it, "icon", "") or ""))
     except Exception:
         pass
-    return pairs[:40]
+    return out[:40]
 
 
 def _default_of(rna, cur, is_array, index):
@@ -112,8 +113,8 @@ def _dynamic_enum(data, name):
                 continue
             if callable(items):
                 items = items(data, bpy.context)
-            pairs = [(i[0], _clean_name(i[1])) for i in items if len(i) >= 2 and _clean_name(i[1])]
-            return pairs[:40]
+            return [(i[0], _clean_name(i[1]), i[3] if len(i) > 3 and isinstance(i[3], str) else "")
+                    for i in items if len(i) >= 2 and _clean_name(i[1])][:40]
     except Exception:
         pass
     return []
@@ -203,7 +204,9 @@ def item_from_prop(data, name, text, icon, expand, slider, toggle, icon_only, in
                 return done("DIRPATH", dir_value=dflt or "")
             return done("STRING", string_value=dflt if isinstance(dflt, str) else "")
         if t == "ENUM":
-            pairs = _enum_info(rna) or _dynamic_enum(data, name)
+            triples = _enum_info(rna) or _dynamic_enum(data, name)
+            pairs = [(a_, b_) for a_, b_, _ in triples]
+            option_icons = [valid_icon(c_) or "" for _, _, c_ in triples]
             current = cur if isinstance(cur, str) and cur else ""
             if not pairs:
                 # The real options can't be read (generated at runtime). Say so in a way nobody can mistake
@@ -218,6 +221,10 @@ def item_from_prop(data, name, text, icon, expand, slider, toggle, icon_only, in
             parsed = el.parse_enum_items(", ".join(names))
             fx = {"enum_items": ", ".join(names),
                   "enum_style": "EXPAND" if (expand or force == "TABS") else "DROPDOWN"}
+            if any(option_icons):
+                fx["enum_icons"] = ",".join(option_icons)
+            if icon_only and (expand or force == "TABS"):
+                fx["enum_icon_only"] = True
             want = dflt if isinstance(dflt, str) and dflt else current  # declared default first
             for (ident_, _), (new_id, _) in zip(pairs, parsed):
                 if ident_ == want:
@@ -547,6 +554,8 @@ def _resolve(c, parent):
         mods = _mods(c)
         if len(c.children) == 1:
             child = c.children[0]
+            if c.type == "ROW" and child.type == "ENUM" and child.fields.get("enum_style") == "EXPAND":
+                child.fields["enum_style"] = "ROW"  # the row is what put the buttons side by side
             if not set(mods) & set(child.fields):
                 child.fields.update(mods)
                 return [child]

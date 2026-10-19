@@ -21,7 +21,7 @@ class UIB_UL_elements(bpy.types.UIList):
         else:
             row.label(text="", icon="BLANK1")
         if item.type == "OPTION":  # label comes from the Choice's option list, so it is not editable here
-            row.label(text="If: %s" % item.label, icon="RIGHTARROW_THIN")
+            row.label(text="If: %s" % item.label, icon=icons.valid_icon(item.icon) or "RIGHTARROW_THIN")
             sub = row.row()
             sub.enabled = False
             sub.label(text="Option")
@@ -185,6 +185,7 @@ def draw_element(layout, e):
         for line in ("Everything inside this row is shown only", "while this option is selected.",
                      "Rename or reorder options in the Choice's", "Options field."):
             box.label(text=line)
+        _pick_icon(layout.column(), e)  # the icon is used on the Choice's buttons / dropdown entries
         return
     col = layout.column()
     col.label(text=d.label, icon=d.icon)
@@ -245,10 +246,13 @@ def draw_element(layout, e):
             warn.label(text="could not be read. Replace them.")
         if t == "ENUM":
             col.prop(e, "enum_style")
+            if e.enum_style != "DROPDOWN":
+                col.prop(e, "enum_icon_only")
             box = col.box()
             box.label(text="Each option has its own row in the list.", icon="INFO")
             box.label(text="Put controls under an option to show")
-            box.label(text="them only when it is chosen.")
+            box.label(text="them only when it is chosen. Give an option")
+            box.label(text="an icon for icon buttons.")
         col.prop(e, "enum_value", text="Default")
     elif t in ("POINTER", "TEMPLATE_ID"):
         col.prop(e, "id_type")

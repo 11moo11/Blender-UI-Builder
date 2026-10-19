@@ -94,7 +94,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 4, 7), updater.local_version()
+    assert updater.local_version() == (1, 5, 0), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -253,7 +253,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 4, 7), updater.local_version()
+    assert updater.local_version() == (1, 5, 0), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -867,7 +867,69 @@ def test_scrape():
     print("scrape OK")
 
 
+def test_enum_buttons():
+    from ui_builder import importer, properties
+    from ui_builder.operators import new_element
+    from ui_builder.preview import Drawer
+    from bpy.props import EnumProperty, PointerProperty
+
+    class BG(bpy.types.PropertyGroup):
+        kind: EnumProperty(name="Kind", items=[("MODEL", "Models", "", "OBJECT_DATA", 0),
+                                               ("MAT", "Materials", "", "MATERIAL", 1)])
+        other: EnumProperty(name="Other", items=[("a", "A", ""), ("b", "B", "")])
+
+    class BTN_PT_main(bpy.types.Panel):
+        bl_label = "Btn"; bl_idname = "BTN_PT_main"
+        bl_space_type = "VIEW_3D"; bl_region_type = "UI"; bl_category = "Btn"
+
+        def draw(self, context):
+            g = context.scene.btn_props
+            r = self.layout.row(); r.prop(g, "kind", expand=True, icon_only=True)     # side by side, icons only
+            self.layout.prop(g, "other", expand=True)                                  # stacked in the panel column
+
+    for c in (BG, BTN_PT_main):
+        bpy.utils.register_class(c)
+        c.__module__ = "btnaddon"
+    bpy.types.Scene.btn_props = PointerProperty(type=BG)
+    try:
+        item, err = importer.build_panel(importer.addon_panels("btnaddon")[0], importer.Ctx(bpy.context))
+        assert not err, err
+        kinds = [c.type for c in item.children]
+        assert kinds == ["ENUM", "ENUM"], kinds   # the row was folded into the style instead of being lost
+        side, stacked = item.children
+        assert side.fields["enum_style"] == "ROW" and side.fields["enum_icon_only"] is True, side.fields
+        assert side.fields["enum_icons"] == "OBJECT_DATA,MATERIAL"
+        assert stacked.fields["enum_style"] == "EXPAND" and "enum_icons" not in stacked.fields
+        s.elements.clear()
+        importer.commit(s, [item], new_element, tree.normalize)
+        rows = [e for e in s.elements if e.type == "OPTION"]
+        assert [(r.label, r.icon) for r in rows[:2]] == [("Models", "OBJECT_DATA"), ("Materials", "MATERIAL")]
+        enum = [e for e in s.elements if e.type == "ENUM"][0]
+        items = properties._enum_value_items(enum, bpy.context)
+        assert items[0][3] == "OBJECT_DATA" and items[1][3] == "MATERIAL", items
+        log = []
+        Drawer(s).nodes(FakeLayout(log), tree.build(s.elements))
+        calls = [(m, kw) for m, a, kw in log]
+        k = [i for i, c in enumerate(calls) if c[0] == "prop" and c[1].get("text") == "Kind"][0]
+        assert calls[k - 1][0] == "row", calls                   # side-by-side: wrapped in its own row
+        assert calls[k + 1][0] == "prop" and calls[k + 1][1].get("text") == "Other"  # stacked: no wrapper
+        props = {kw.get("text"): kw for m, kw_a, kw in log if m == "prop"}
+        assert props["Kind"].get("expand") and props["Kind"].get("icon_only") and not props["Other"].get("icon_only")
+        code = export.Exporter(s).python()
+        assert '"OBJECT_DATA", 0)' in code and "icon_only=True" in code and ".row(align=True)" in code, code
+        ns = {"__name__": "gen_btn"}
+        exec(compile(code, "<btn>", "exec"), ns)
+        ns["register"]()
+        ns["unregister"]()
+    finally:
+        del bpy.types.Scene.btn_props
+        for c in (BTN_PT_main, BG):
+            bpy.utils.unregister_class(c)
+    print("enum buttons OK")
+
+
 check_icons()
+test_enum_buttons()
 test_scrape()
 test_branches()
 test_multiselect()

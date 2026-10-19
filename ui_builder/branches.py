@@ -109,6 +109,9 @@ def sync_options(s, i):
         row = elems[end]
         row.auto_ident = False
         row.option_id = oid
+        icons = [x.strip() for x in elems[i].enum_icons.split(",")]
+        if pos < len(icons) and icons[pos]:
+            row.icon = icons[pos]
 
     # 4. order the rows like the options, right below the Choice
     cursor = i + 1
@@ -122,6 +125,25 @@ def sync_options(s, i):
             for k in range(b - a):
                 elems.move(a + k, cursor + k)
         cursor += b - a
+
+
+def option_icons(element, context):
+    """{option id: icon name} for the Option rows under a Choice (used for the mockup's button icons)."""
+    from .icons import valid_icon
+    try:
+        s = context.scene.ui_builder
+        elems = s.elements
+        for i, e in enumerate(elems):
+            if e == element:
+                out = {}
+                for k in _direct_children(elems, i, "OPTION"):
+                    icon = valid_icon(elems[k].icon)
+                    if icon:
+                        out[elems[k].option_id] = icon
+                return out
+    except Exception:
+        pass
+    return {}
 
 
 def sync_all(s):

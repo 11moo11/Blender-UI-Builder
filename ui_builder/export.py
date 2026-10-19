@@ -6,6 +6,7 @@ import re
 import bpy
 
 from . import branches
+from .icons import valid_icon
 from . import elements as el
 from . import tree
 
@@ -136,7 +137,16 @@ class Exporter:
             return self._decl(a, "StringProperty", kw), "StringProperty"
         if t == "ENUM":
             items = el.parse_enum_items(e.enum_items)
-            kw["items"] = Raw("[%s]" % ", ".join("(%s, %s, \"\")" % (_lit(i[0]), _lit(i[1])) for i in items))
+            icons = {}
+            for c in n.children:
+                if c.elem.type == "OPTION" and valid_icon(c.elem.icon):
+                    icons[c.elem.option_id] = valid_icon(c.elem.icon)
+            if icons:  # items with icons need (id, name, description, icon, number)
+                kw["items"] = Raw("[%s]" % ", ".join(
+                    "(%s, %s, \"\", %s, %d)" % (_lit(i[0]), _lit(i[1]), _lit(icons.get(i[0], "NONE")), k)
+                    for k, i in enumerate(items)))
+            else:
+                kw["items"] = Raw("[%s]" % ", ".join("(%s, %s, \"\")" % (_lit(i[0]), _lit(i[1])) for i in items))
             kw["default"] = val
             return self._decl(a, "EnumProperty", kw), "EnumProperty"
         if t in ("COLOR", "COLOR_PICKER", "COLOR_ALPHA", "VEC2", "VEC3", "EULER"):
@@ -256,7 +266,7 @@ class Exporter:
         if not d.container or e.type == "ENUM":
             target = layout
             attrs = el.layout_attrs(e, False)
-            if attrs:
+            if el.wrap_needed(e, attrs):
                 target = self.var("sub")
                 out.append("%s%s = %s.%s(align=True)" % (pad, target, layout, el.wrapper_method(e)))
                 out += ["%s%s.%s = %s" % (pad, target, k, _arg(v)) for k, v in attrs]

@@ -119,7 +119,7 @@ class Drawer:
         else:
             target = layout
             attrs = el.layout_attrs(e, False)
-            if attrs:
+            if el.wrap_needed(e, attrs):
                 target = getattr(layout, el.wrapper_method(e))(align=True)
                 _apply(target, attrs)
             for spec in el.leaf_specs(e):
