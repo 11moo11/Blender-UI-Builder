@@ -6,7 +6,7 @@ import bpy
 from bpy.props import EnumProperty, StringProperty
 from bpy_extras.io_utils import ImportHelper
 
-from . import export, tree
+from . import branches, export, tree
 from .operators import new_element
 from .properties import ensure_mock_items, settings
 
@@ -122,12 +122,20 @@ _EXAMPLE = [
 def load_example(context):
     s = settings(context)
     s.elements.clear()
-    for type_id, label, indent, values in _EXAMPLE:
-        new_element(s, type_id, len(s.elements), indent, label)
-        e = s.elements[len(s.elements) - 1]
-        for k, v in values.items():
-            setattr(e, k, v)
+    with branches.no_sync():
+        for type_id, label, indent, values in _EXAMPLE:
+            new_element(s, type_id, len(s.elements), indent, label)
+            e = s.elements[len(s.elements) - 1]
+            for k, v in values.items():
+                setattr(e, k, v)
     tree.normalize(s.elements)
+    branches.sync_all(s)
+    # show the Choice branching: something that only appears for the "Final" option
+    for i, e in enumerate(s.elements):
+        if e.option_id == "final":
+            new_element(s, "LABEL", i + 1, e.indent + 1, "Final renders can take a long time")
+            s.elements[i + 1].icon = "TIME"
+            break
     s.active_index = 0
     s.addon_name = "Render Helper"
     s.prefix = "render_helper"

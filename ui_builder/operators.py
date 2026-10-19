@@ -6,7 +6,7 @@ import bpy
 from bpy.props import BoolProperty, EnumProperty, StringProperty
 
 from . import elements as el
-from . import icons, tree
+from . import branches, icons, tree
 from .properties import ensure_mock_items, settings
 
 _ADD_ITEMS = [(d.id, d.label, d.help) for d in el._DEFS] + [("SUBPANEL", "Sub-panel", "Panel nested in the active panel")]
@@ -52,6 +52,8 @@ def _insert_position(s, type_id, nest):
         if p >= 0:
             return tree.block_end(elems, p), elems[p].indent
         return len(elems), 0
+    if active.type == "ENUM":  # a Choice's contents go under its options: add as a sibling instead
+        return tree.block_end(elems, i), active.indent
     if el.DEFS[active.type].container:
         return tree.block_end(elems, i), active.indent + 1
     return i + 1, active.indent
@@ -77,6 +79,7 @@ class UIB_OT_add(bpy.types.Operator):
         new_element(s, type_id, index, indent, label)
         s.active_index = index
         tree.normalize(s.elements)
+        branches.sync_all(s)
         _redraw(context)
         return {"FINISHED"}
 
@@ -146,6 +149,7 @@ class UIB_OT_remove(_ElementOp):
                 for _ in range(end - a):
                     s.elements.remove(a)
         s.active_index = max(0, min(s.active_index, len(s.elements) - 1))
+        branches.sync_all(s)
         _redraw(context)
         return {"FINISHED"}
 
@@ -178,15 +182,16 @@ class UIB_OT_duplicate(_ElementOp):
                     runs[-1][1] = end
                 else:
                     runs.append([a, end])
-            for a, end in reversed(runs):
-                for k in range(end - a):
-                    elems.add()  # may reallocate, so look elements up by index afterwards
-                    _copy_props(elems[a + k], elems[len(elems) - 1])
-                    elems.move(len(elems) - 1, end + k)
-                    elems[end + k].marker = False
-                for k in range(a, end):
-                    elems[k].selected = False  # the copies stay selected
-                first_copy = end
+            with branches.no_sync():
+                for a, end in reversed(runs):
+                    for k in range(end - a):
+                        elems.add()  # may reallocate, so look elements up by index afterwards
+                        _copy_props(elems[a + k], elems[len(elems) - 1])
+                        elems.move(len(elems) - 1, end + k)
+                        elems[end + k].marker = False
+                    for k in range(a, end):
+                        elems[k].selected = False  # the copies stay selected
+                    first_copy = end
         if first_copy is not None:
             s.active_index = first_copy
         _redraw(context)
@@ -228,6 +233,7 @@ class UIB_OT_move(_ElementOp):
                     for k in range(c - b):
                         elems.move(b + k, a + k)
                     moved = True
+        branches.sync_all(s)  # Option rows always follow the Choice's option order
         _redraw(context)
         return {"FINISHED"} if moved else {"CANCELLED"}
 
@@ -250,7 +256,7 @@ class UIB_OT_indent(_ElementOp):
                 for a in tops:
                     b = tree.block_end(elems, a)
                     p = _prev_sibling(elems, a)
-                    if p is None or not el.DEFS[elems[p].type].container:
+                    if p is None or not el.can_nest(elems[p].type):
                         continue
                     for k in range(a, b):
                         elems[k].indent += 1
@@ -273,6 +279,7 @@ class UIB_OT_indent(_ElementOp):
                         elems[k].indent -= 1
                     changed += 1
             tree.normalize(elems)
+        branches.sync_all(s)
         if not changed:
             self.report({"INFO"}, "Nothing to nest here: put a container (Row, Box, Panel...) right above "
                                   "to move into it" if self.direction == "IN" else "Already at the top level")
@@ -299,8 +306,11 @@ class UIB_OT_replace(_ElementOp):
             for i in [i for i, e in enumerate(elems) if e.selected]:
                 e = elems[i]
                 old = el.DEFS[e.type]
-                if e.type == self.type:
+                if e.type == self.type or e.type == "OPTION":
                     continue
+                if e.type == "ENUM":  # leaving Choice: its Option rows dissolve, contents move up
+                    branches.strip_options(elems, i)
+                    e = elems[i]  # the removals above may have invalidated the old reference
                 if not new.container:  # a leaf can't hold children: move them up one level
                     end = tree.block_end(elems, i)
                     for k in range(i + 1, end):
@@ -314,6 +324,7 @@ class UIB_OT_replace(_ElementOp):
                 if self.type == "LIST":
                     ensure_mock_items(context.scene)
             tree.normalize(elems)
+        branches.sync_all(s)
         if lifted:
             self.report({"INFO"}, "%d child element(s) were moved up a level" % lifted)
         _redraw(context)

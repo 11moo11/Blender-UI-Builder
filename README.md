@@ -29,6 +29,12 @@ Open the 3D Viewport sidebar (`N`) and pick the **UI Builder** tab.
 
 New to it? **Project menu (▾ in the header) > Load Example**.
 
+### Choices that show different controls per option
+
+A **Choice** (dropdown or row of buttons) gets one **Option** row in the list for every entry in its *Options* field, nested directly under it. Put controls under an option (select the option row and *Add Element*) and they appear in the mockup, and in the exported `if props.choice == "option_a":` blocks, only while that option is selected. Pick an option in the mockup to see its branch.
+
+Option rows stay in sync automatically: rename options and their contents stay with the same position, add an option and a new row appears, reorder the text and the rows follow. An option you delete that still has controls inside is kept and marked *(removed option)* until you delete or re-add it. Rows can be folded with the triangle at the start of a row. Controls added straight under the Choice itself (not under an option) are always shown.
+
 ### Where it lives
 
 Not everything is in a sidebar panel: a panel can sit in a header dropdown, the Image Editor or the Properties editor, and some things (a viewport overlay, a gizmo, a header button) aren't drawn by a panel at all. The **Where It Lives** panel shows this:
@@ -51,7 +57,7 @@ Limits: panels whose draw code needs context that isn't there (for example a sel
 
 - **Layout:** Panel, Sub-panel, Collapsible Box, Row, Column, Box, Split, Grid, Separator / Spacer
 - **Text:** Label, Text Block
-- **Properties:** Checkbox / Toggle, Integer, Float, Slider, Percentage, Angle, Distance, Text, File path, Folder path, Choice (dropdown or row of buttons), Color, Color + Alpha, Vector 2D/3D, Euler, Data-block pointer, Search field
+- **Properties:** Checkbox / Toggle, Integer, Float, Slider, Percentage, Angle, Distance, Text, File path, Folder path, Choice (dropdown or row of buttons), Color (optional Alpha), Vector 2D/3D, Euler, Data-block pointer, Search field
 - **Buttons & Menus:** Button (operator), Action Menu, Popover
 - **Templates:** List (UIList), Data-block selector (`template_ID`), Color wheel, Preview image, Progress bar
 

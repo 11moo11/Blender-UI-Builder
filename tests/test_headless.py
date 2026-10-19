@@ -58,7 +58,7 @@ def test_builder_ui():
         cls.draw(inst, bpy.context)
     for menu in [ui.UIB_MT_add, ui.UIB_MT_project] + [m for _, _, _, m in ui._add_menus]:
         menu.draw(types.SimpleNamespace(layout=FakeLayout([])), bpy.context)
-    ui.UIB_UL_elements.draw_item(types.SimpleNamespace(layout_type="DEFAULT"), bpy.context, FakeLayout([]), None, s.elements[2], 0, None, "", 0)
+    ui.UIB_UL_elements.draw_item(types.SimpleNamespace(layout_type="DEFAULT"), bpy.context, FakeLayout([]), s, s.elements[2], 0, None, "", 0)
     preferences.draw_update_box(FakeLayout([]), preferences.get_prefs())
     print("builder ui OK")
 
@@ -94,7 +94,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 3, 2), updater.local_version()
+    assert updater.local_version() == (1, 4, 0), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -217,7 +217,7 @@ def test_builder_ui():
         cls.draw(inst, bpy.context)
     for menu in [ui.UIB_MT_add, ui.UIB_MT_project] + [m for _, _, _, m in ui._add_menus]:
         menu.draw(types.SimpleNamespace(layout=FakeLayout([])), bpy.context)
-    ui.UIB_UL_elements.draw_item(types.SimpleNamespace(layout_type="DEFAULT"), bpy.context, FakeLayout([]), None, s.elements[2], 0, None, "", 0)
+    ui.UIB_UL_elements.draw_item(types.SimpleNamespace(layout_type="DEFAULT"), bpy.context, FakeLayout([]), s, s.elements[2], 0, None, "", 0)
     preferences.draw_update_box(FakeLayout([]), preferences.get_prefs())
     print("builder ui OK")
 
@@ -253,7 +253,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 3, 2), updater.local_version()
+    assert updater.local_version() == (1, 4, 0), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -623,11 +623,127 @@ def test_multiselect():
     bpy.ops.ui_builder.select(action="NONE")
     assert not any(e.selected for e in s.elements)
     from ui_builder import ui
-    ui.UIB_UL_elements.draw_item(types.SimpleNamespace(layout_type="DEFAULT"), bpy.context, FakeLayout([]), None, s.elements[0], 0, None, "", 0)
+    ui.UIB_UL_elements.draw_item(types.SimpleNamespace(layout_type="DEFAULT"), bpy.context, FakeLayout([]), s, s.elements[0], 0, None, "", 0)
     print("multiselect OK")
 
 
+def test_branches():
+    from ui_builder import ui, branches
+    from ui_builder.preview import Drawer
+    s.elements.clear()
+
+    def rows():
+        return [(e.type, e.label, e.indent) for e in s.elements]
+
+    bpy.ops.ui_builder.add(type="PANEL")
+    bpy.ops.ui_builder.add(type="ENUM")
+    assert rows() == [("PANEL", "Panel", 0), ("ENUM", "Choice (Dropdown / Buttons)", 1), ("OPTION", "Option A", 2),
+                      ("OPTION", "Option B", 2), ("OPTION", "Option C", 2)], rows()
+    s.elements[1].label = "View"
+    s.active_index = 3  # the "Option B" row: new controls go inside it
+    bpy.ops.ui_builder.add(type="LABEL")
+    s.elements[4].label = "only in B"
+    assert [(r[0], r[2]) for r in rows()][2:] == [("OPTION", 2), ("OPTION", 2), ("LABEL", 3), ("OPTION", 2)], rows()
+    s.active_index = 1
+    bpy.ops.ui_builder.add(type="LABEL")  # active is the Choice: new element is a sibling after it
+    assert rows()[-1] == ("LABEL", "Label", 1), rows()
+    s.elements[len(s.elements) - 1].label = "always"
+
+    # renaming every option keeps the contents with the same position
+    enum = s.elements[1]
+    enum.enum_items = "Shape, Material, Settings"
+    assert [(r[1], r[2]) for r in rows() if r[0] == "OPTION"] == [("Shape", 2), ("Material", 2), ("Settings", 2)], rows()
+    assert [e.option_id for e in s.elements if e.type == "OPTION"] == ["shape", "material", "settings"]
+    assert rows()[4] == ("LABEL", "only in B", 3)
+    # add, reorder, remove
+    s.elements[1].enum_items = "Settings, Shape, Material, Extra"
+    assert [e.label for e in s.elements if e.type == "OPTION"] == ["Settings", "Shape", "Material", "Extra"], rows()
+    mat = [i for i, e in enumerate(s.elements) if e.label == "Material"][0]
+    assert s.elements[mat + 1].label == "only in B"
+    s.elements[1].enum_items = "Settings, Shape, Extra"
+    labels = [e.label for e in s.elements if e.type == "OPTION"]
+    assert labels == ["Settings", "Shape", "Extra", "Material (removed option)"], labels  # had contents: kept
+    s.elements[1].enum_items = "Settings, Shape, Extra, Material"
+    assert [e.label for e in s.elements if e.type == "OPTION"][-1] == "Material"  # re-adopted with its contents
+    assert any(e.label == "only in B" for e in s.elements)
+
+    # preview shows only the chosen option's controls
+    def drawn(value):
+        s.elements[1].enum_value = value
+        log = []
+        Drawer(s).nodes(FakeLayout(log), tree.build(s.elements))
+        return [kw.get("text") for m, a, kw in log if m == "label"]
+    assert "only in B" in drawn("material") and "only in B" not in drawn("shape")
+    assert "always" in drawn("shape")
+
+    # export: if-block on the property, compiles, runs
+    s.elements[1].enum_value = "settings"
+    ex = export.Exporter(s)
+    code = ex.python()
+    assert "if props.view == \"material\":" in code, code
+    ns = {"__name__": "gen_branch"}
+    exec(compile(code, "<branch>", "exec"), ns)
+    ns["register"]()
+    try:
+        props = getattr(scene, ex.group)
+        panel = [c for c in ns["classes"] if issubclass(c, bpy.types.Panel)][0]
+        for value, want in (("material", True), ("shape", False)):
+            props.view = value
+            log = []
+            panel.draw(types.SimpleNamespace(layout=FakeLayout(log)), bpy.context)
+            assert (("only in B" in [kw.get("text") for m, a, kw in log if m == "label"]) == want), value
+    finally:
+        ns["unregister"]()
+    assert "If \"Material\"" in ex.llm()
+
+    # moving an Option row can't scramble the order; folding hides the rows
+    s.active_index = [i for i, e in enumerate(s.elements) if e.label == "Shape"][0]
+    bpy.ops.ui_builder.move(direction="UP")
+    assert [e.label for e in s.elements if e.type == "OPTION"] == ["Settings", "Shape", "Extra", "Material"]
+    s.elements[1].fold = True
+    flags, _ = ui.UIB_UL_elements.filter_items(types.SimpleNamespace(bitflag_filter_item=1), bpy.context, s, "elements")
+    assert flags[0] == 1 and flags[1] == 1 and all(f == 0 for f, e in zip(flags[2:], list(s.elements)[2:]) if e.indent >= 2)
+    s.elements[1].fold = False
+
+    # duplicate keeps one set of option rows; JSON round-trips
+    s.active_index = 1
+    bpy.ops.ui_builder.duplicate()
+    assert [e.type for e in s.elements].count("OPTION") == 8, rows()
+    dumped = export.dump_project(s)
+    n = len(s.elements)
+    export.load_project(s, dumped)
+    assert len(s.elements) == n and export.dump_project(s) == dumped
+    s.active_index = [i for i, e in enumerate(s.elements) if e.type == "ENUM"][1]
+    bpy.ops.ui_builder.remove()  # removes the duplicate with its options
+    assert [e.type for e in s.elements].count("OPTION") == 4
+
+    # replacing the Choice dissolves its options, contents move up
+    s.active_index = 1
+    bpy.ops.ui_builder.replace(type="ROW")
+    assert not any(e.type == "OPTION" for e in s.elements), rows()
+    assert any(e.label == "only in B" and e.indent == 2 for e in s.elements), rows()
+    bpy.ops.ui_builder.replace(type="ENUM")
+    assert [e.type for e in s.elements].count("OPTION") == 4, rows()  # one per option again
+    assert [e.label for e in s.elements if e.type == "OPTION"] == ["Settings", "Shape", "Extra", "Material"]
+
+    # merged Color element
+    s.elements.clear()
+    bpy.ops.ui_builder.add(type="COLOR")
+    c = s.elements[0]
+    assert el.value_attr(c) == "color_value"
+    c.use_alpha = True
+    assert el.value_attr(c) == "color_alpha_value"
+    code = export.Exporter(s).python()
+    assert "size=4" in code, code
+    log = []
+    Drawer(s).nodes(FakeLayout(log), tree.build(s.elements))
+    assert log[0][1][1] == "color_alpha_value", log
+    assert "COLOR_ALPHA" not in [d.id for d in el.DEFS.values() if not d.hidden]
+    print("branches OK")
+
+
 check_icons()
+test_branches()
 test_multiselect()
 test_simplify()
 test_locations()

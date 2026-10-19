@@ -114,7 +114,7 @@ class Drawer:
             layout.active = False
         if e.type == "POPOVER":
             self.popover(layout, n)
-        elif d.container:
+        elif d.container and e.type != "ENUM":
             self.container(layout, n)
         else:
             target = layout
@@ -124,12 +124,24 @@ class Drawer:
                 _apply(target, attrs)
             for spec in el.leaf_specs(e):
                 self.call(target, e, spec)
+            if e.type == "ENUM":
+                self.branches(layout, n)
             if e.description and e.type != "BUTTON" and self.settings.preview_tooltips:
                 col = layout.column(align=True)
                 col.active = False
                 col.scale_y = 0.75
                 for line in textwrap.wrap(e.description, 44):
                     col.label(text=line, icon="NONE")
+
+    def branches(self, layout, n):
+        """Only the children of the currently selected option are drawn."""
+        chosen = n.elem.enum_value
+        for child in n.children:
+            if child.elem.type != "OPTION":
+                self.node(layout, child)
+            elif child.elem.option_id == chosen and child.children:
+                col = layout.column()
+                self.nodes(col, child.children)
 
     def _header(self, layout, e, checkbox=False):
         row = layout.row(align=True)
@@ -153,6 +165,9 @@ class Drawer:
                 if e.type == "PANEL" and e.header_checkbox and not e.bool_value:
                     body.active = False
                 self.nodes(body, n.children)
+            return
+        if e.type == "OPTION":  # stray row: just draw its contents
+            self.nodes(layout, n.children)
             return
         method, kw = el.container_spec(e)
         sub = getattr(layout, method)(**kw)

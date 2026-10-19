@@ -24,6 +24,11 @@ def _enum_value_items(self, context):
     return items
 
 
+def _on_enum_items(self, context):
+    from . import branches
+    branches.sync_for(self, context)
+
+
 def _on_label(self, context):
     if self.auto_ident:
         self.ident = el.slugify(self.label, el.slugify(self.type))
@@ -52,6 +57,8 @@ class UIB_Element(bpy.types.PropertyGroup):
     icon: StringProperty(name="Icon", default="NONE")
     indent: IntProperty(default=0, min=0)
     expanded: BoolProperty(name="Expanded", default=True)
+    fold: BoolProperty(name="Fold", description="Hide this element's children in the list", default=False)
+    option_id: StringProperty(description="For Option rows: identifier of the Choice option this row stands for")
     selected: BoolProperty(name="Select", description="Tick to act on several elements at once. Click and "
                                                       "drag over the checkboxes to tick many", default=False)
     marker: BoolProperty(default=False, options={"SKIP_SAVE"})  # internal: tracks the active row
@@ -102,8 +109,10 @@ class UIB_Element(bpy.types.PropertyGroup):
         ("CHECKBOX", "Checkbox", ""), ("TOGGLE", "Toggle Button", ""), ("ICON", "Icon Toggle", "Needs an icon")])
     enum_style: EnumProperty(name="Style", default="DROPDOWN", items=[
         ("DROPDOWN", "Dropdown", ""), ("EXPAND", "Row of Buttons", "")])
-    enum_items: StringProperty(name="Options", description="Comma separated option names",
+    enum_items: StringProperty(name="Options", update=_on_enum_items,
+                               description="Comma separated option names. Each one gets its own row in the list",
                                default="Option A, Option B, Option C")
+    use_alpha: BoolProperty(name="Alpha", description="Add an alpha channel (RGBA)", default=False)
     separator_style: EnumProperty(name="Style", default="AUTO", items=[
         ("AUTO", "Auto", ""), ("SPACE", "Space", ""), ("LINE", "Line", "")])
     spacer_factor: FloatProperty(name="Size", default=1.0, min=0.0, soft_max=10.0)
@@ -223,8 +232,10 @@ def ensure_mock_items(scene):
 
 
 def _load_post(_dummy):
+    from . import branches
     for sc in bpy.data.scenes:
         ensure_mock_items(sc)
+        branches.sync_all(sc.ui_builder)
 
 
 def _init_timer():

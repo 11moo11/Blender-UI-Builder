@@ -5,11 +5,12 @@ import re
 
 import bpy
 
+from . import branches
 from . import elements as el
 from . import tree
 
 FORMAT_VERSION = 1
-_NO_LABEL = {"ROW", "COLUMN", "BOX", "SPLIT", "GRID", "SEPARATOR", "SPACER", "TEXT_LINES"}
+_NO_LABEL = {"OPTION", "ROW", "COLUMN", "BOX", "SPLIT", "GRID", "SEPARATOR", "SPACER", "TEXT_LINES"}
 
 
 def _lit(v):
@@ -90,7 +91,7 @@ class Exporter:
     def property_defs(self, n):
         e, t, a = n.elem, n.elem.type, n.name
         kw = self._base_kw(n)
-        val = getattr(e, el.VALUE_ATTR[t]) if t in el.VALUE_ATTR else None
+        val = getattr(e, el.value_attr(e)) if t in el.VALUE_ATTR else None
 
         def rng(kw, lo=None, hi=None):
             if e.use_range:
@@ -139,7 +140,8 @@ class Exporter:
             kw["default"] = val
             return self._decl(a, "EnumProperty", kw), "EnumProperty"
         if t in ("COLOR", "COLOR_PICKER", "COLOR_ALPHA", "VEC2", "VEC3", "EULER"):
-            size = {"COLOR": 3, "COLOR_PICKER": 3, "COLOR_ALPHA": 4, "VEC2": 2, "VEC3": 3, "EULER": 3}[t]
+            size = {"COLOR": 4 if e.use_alpha else 3, "COLOR_PICKER": 3, "COLOR_ALPHA": 4, "VEC2": 2,
+                    "VEC3": 3, "EULER": 3}[t]
             kw["size"] = size
             kw["default"] = tuple(round(x, 4) for x in val)
             if t.startswith("COLOR"):
@@ -220,6 +222,23 @@ class Exporter:
                 continue
             self.gen_node(n, layout, ind, out)
 
+    def gen_branches(self, n, layout, ind, out):
+        """`if props.choice == 'a': ...` blocks, one per option that has contents."""
+        first = True
+        for child in n.children:
+            if child.elem.type != "OPTION":
+                self.gen_children([child], layout, ind, out)
+                continue
+            body = []
+            self.gen_children(child.children, layout, ind + 1, body)
+            if not body:
+                continue
+            out.append("%s%s props.%s == %s:  # %s" % (
+                "    " * ind, "if" if first else "elif", n.name, _lit(child.elem.option_id),
+                child.elem.label.replace("\n", " ")))
+            out += body
+            first = False
+
     def gen_node(self, n, layout, ind, out):
         e = n.elem
         pad = "    " * ind
@@ -234,7 +253,7 @@ class Exporter:
             for spec in el.leaf_specs(e, export=True):
                 out.append(pad + self.call_line(target, n, spec))
             return
-        if not d.container:
+        if not d.container or e.type == "ENUM":
             target = layout
             attrs = el.layout_attrs(e, False)
             if attrs:
@@ -243,6 +262,11 @@ class Exporter:
                 out += ["%s%s.%s = %s" % (pad, target, k, _arg(v)) for k, v in attrs]
             for spec in el.leaf_specs(e, export=True):
                 out.append(pad + self.call_line(target, n, spec))
+            if e.type == "ENUM":
+                self.gen_branches(n, layout, ind, out)
+            return
+        if e.type == "OPTION":  # stray row
+            self.gen_children(n.children, layout, ind, out)
             return
         attrs = el.layout_attrs(e, True)
         if n.is_collapsible:
@@ -465,6 +489,9 @@ class Exporter:
         def describe(n):
             e = n.elem
             d = el.DEFS[e.type]
+            if e.type == "OPTION":
+                return "If \"%s\" is chosen (`%s`)%s" % (e.label, e.option_id,
+                                                         "" if n.children else " - nothing extra shown")
             kind = "Sub-panel" if e.type == "PANEL" and n.parent else d.label
             if n.is_collapsible:
                 kind = "Collapsible box"
@@ -477,6 +504,8 @@ class Exporter:
                 bits.append("aligned")
             if e.type == "SPLIT":
                 bits.append("factor %.2f" % e.split_factor)
+            if e.type == "COLOR" and e.use_alpha:
+                bits.append("with alpha")
             if e.type in ("ENUM", "MENU"):
                 bits.append("options: " + ", ".join(i[1] for i in el.parse_enum_items(e.enum_items)))
             if e.type in ("POINTER", "TEMPLATE_ID"):
@@ -643,6 +672,14 @@ def load_project(s, text):
             except (TypeError, ValueError):
                 pass
     s.elements.clear()
+    with branches.no_sync():
+        _load_elements(s, data)
+    tree.normalize(s.elements)
+    branches.sync_all(s)
+    s.active_index = 0
+
+
+def _load_elements(s, data):
     for item in data.get("elements", []):
         if item.get("type") not in el.DEFS:
             continue
@@ -659,5 +696,3 @@ def load_project(s, text):
             except (TypeError, ValueError, AttributeError):
                 pass
         e.auto_ident = item.get("auto_ident", True)
-    tree.normalize(s.elements)
-    s.active_index = 0

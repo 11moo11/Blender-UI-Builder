@@ -69,10 +69,14 @@ _DEFS = (
     Def("STRING", "Text Field", "PROPS", "FONT_DATA", desc=True, help="String property."),
     Def("FILEPATH", "File Path", "PROPS", "FILE", desc=True, help="File picker."),
     Def("DIRPATH", "Folder Path", "PROPS", "FILE_FOLDER", desc=True, help="Folder picker."),
-    Def("ENUM", "Choice (Dropdown / Buttons)", "PROPS", "COLLAPSEMENU", desc=True,
-        help="Pick one value from a list: shown as a dropdown or as a row of buttons."),
-    Def("COLOR", "Color", "PROPS", "COLOR", desc=True, help="RGB color."),
-    Def("COLOR_ALPHA", "Color + Alpha", "PROPS", "IMAGE_RGB_ALPHA", desc=True, help="RGBA color."),
+    Def("ENUM", "Choice (Dropdown / Buttons)", "PROPS", "COLLAPSEMENU", container=True, desc=True,
+        help="Pick one value from a list (dropdown or row of buttons). Every option gets its own "
+             "line item: put controls under an option to show them only when it is chosen."),
+    Def("OPTION", "Option", "PROPS", "RIGHTARROW_THIN", container=True, ident=False, icon_ok=False, hidden=True,
+        help="One option of a Choice. Its children appear only while this option is selected."),
+    Def("COLOR", "Color", "PROPS", "COLOR", desc=True, help="Color picker (tick Alpha for RGBA)."),
+    Def("COLOR_ALPHA", "Color + Alpha (legacy)", "PROPS", "IMAGE_RGB_ALPHA", desc=True, hidden=True,
+        help="Superseded by Color with the Alpha option."),
     Def("VEC2", "Vector 2D", "PROPS", "EMPTY_AXIS", desc=True, help="Two float fields."),
     Def("VEC3", "Vector 3D", "PROPS", "CON_LOCLIMIT", desc=True, help="X Y Z float fields."),
     Def("EULER", "Euler Rotation", "PROPS", "ORIENTATION_GIMBAL", desc=True, help="X Y Z rotation."),
@@ -335,8 +339,15 @@ def leaf_specs(e, export=False):
     raise KeyError(t)
 
 
+def can_nest(type_id):
+    """Whether new children may be put straight inside this element type."""
+    return DEFS[type_id].container and type_id != "ENUM"  # a Choice's children live under its options
+
+
 def value_attr(e):
     """Name of the element attribute holding this element's value."""
+    if e.type == "COLOR" and e.use_alpha:
+        return "color_alpha_value"
     if e.type in ("POINTER", "TEMPLATE_ID"):
         return POINTER_ATTR[e.id_type]
     return VALUE_ATTR[e.type]

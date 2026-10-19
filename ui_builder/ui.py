@@ -10,17 +10,40 @@ from .properties import settings
 class UIB_UL_elements(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         d = el.DEFS.get(item.type)
+        elems = data.elements
         row = layout.row(align=True)
         row.prop(item, "selected", text="", emboss=False,
                  icon="CHECKBOX_HLT" if item.selected else "CHECKBOX_DEHLT")
         for _ in range(item.indent):
             row.label(text="", icon="BLANK1")
+        if index + 1 < len(elems) and elems[index + 1].indent > item.indent:
+            row.prop(item, "fold", text="", emboss=False, icon="TRIA_RIGHT" if item.fold else "TRIA_DOWN")
+        else:
+            row.label(text="", icon="BLANK1")
+        if item.type == "OPTION":  # label comes from the Choice's option list, so it is not editable here
+            row.label(text="If: %s" % item.label, icon="RIGHTARROW_THIN")
+            sub = row.row()
+            sub.enabled = False
+            sub.label(text="Option")
+            return
         row.label(text="", icon=d.icon if d else "QUESTION")
         row.prop(item, "label", text="", emboss=False)
         if d:
             sub = row.row()
             sub.enabled = False
             sub.label(text=d.label)
+
+    def filter_items(self, context, data, propname):
+        """Hide the children of folded elements."""
+        items = getattr(data, propname)
+        flags = [self.bitflag_filter_item] * len(items)
+        hide_below = None
+        for i, e in enumerate(items):
+            if hide_below is not None and e.indent > hide_below:
+                flags[i] = 0
+                continue
+            hide_below = e.indent if e.fold else None
+        return flags, []
 
 
 def _add_menu(category, title, icon, operator="ui_builder.add", prefix="add"):
@@ -156,6 +179,13 @@ def draw_element(layout, e):
     d = el.DEFS[e.type]
     t = e.type
     layout.use_property_split = False
+    if t == "OPTION":
+        box = layout.box()
+        box.label(text="Option: %s" % e.label, icon="RIGHTARROW_THIN")
+        for line in ("Everything inside this row is shown only", "while this option is selected.",
+                     "Rename or reorder options in the Choice's", "Options field."):
+            box.label(text=line)
+        return
     col = layout.column()
     col.label(text=d.label, icon=d.icon)
     col.prop(e, "label", text="Name")
@@ -194,6 +224,8 @@ def draw_element(layout, e):
     elif t in ("INT", "FLOAT", "SLIDER", "FACTOR", "PERCENT", "ANGLE", "DISTANCE", "STRING", "FILEPATH",
                "DIRPATH", "COLOR", "COLOR_ALPHA", "VEC2", "VEC3", "EULER", "SEARCH", "PROGRESS"):
         col.prop(e, el.value_attr(e), text="Default")
+        if t == "COLOR":
+            col.prop(e, "use_alpha")
         if t == "SEARCH":
             col.prop(e, "search_source")
         if t == "PROGRESS":
@@ -208,6 +240,10 @@ def draw_element(layout, e):
         col.prop(e, "enum_items")
         if t == "ENUM":
             col.prop(e, "enum_style")
+            box = col.box()
+            box.label(text="Each option has its own row in the list.", icon="INFO")
+            box.label(text="Put controls under an option to show")
+            box.label(text="them only when it is chosen.")
         col.prop(e, "enum_value", text="Default")
     elif t in ("POINTER", "TEMPLATE_ID"):
         col.prop(e, "id_type")

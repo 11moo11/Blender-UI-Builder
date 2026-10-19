@@ -11,6 +11,7 @@ import types
 
 import bpy
 
+from . import branches
 from . import elements as el
 from .icons import valid_icon
 
@@ -132,7 +133,7 @@ def item_from_prop(data, name, text, icon, expand, slider, toggle, icon_only, in
         if t in ("INT", "FLOAT") and arr:
             sub = rna.subtype
             if sub in ("COLOR", "COLOR_GAMMA") and n in (3, 4):
-                return done("COLOR_ALPHA" if n == 4 else "COLOR",
+                return done("COLOR", use_alpha=(n == 4),
                             **({"color_alpha_value": tuple(cur)} if n == 4 and cur else
                                {"color_value": tuple(cur)[:3]} if cur else {}))
             if sub == "EULER" and n == 3:
@@ -590,6 +591,9 @@ def commit(s, items, new_element, normalize):
         for c in item.children:
             add(c, depth + 1)
 
-    for it in items:
-        add(it, 0)
+    with branches.no_sync():
+        for it in items:
+            add(it, 0)
     normalize(s.elements)
+    branches.sync_all(s)
+
