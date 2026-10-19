@@ -219,6 +219,14 @@ class UIB_OT_move(_ElementOp):
                 for a in tops:
                     b = tree.block_end(elems, a)
                     p = _prev_sibling(elems, a)
+                    if p is None:
+                        par = branches._parent_index(elems, a)  # first child of an option: hop into the previous one
+                        if par >= 0 and elems[par].type == "OPTION":
+                            before = _prev_sibling(elems, par)
+                            if before is not None and elems[before].type == "OPTION":
+                                elems.move(par, b - 1)  # the option row slides below the block
+                                moved = True
+                                continue
                     if p is None or p in blocked:
                         blocked.add(a)
                         continue
@@ -228,6 +236,11 @@ class UIB_OT_move(_ElementOp):
             else:
                 for a in reversed(tops):
                     b = tree.block_end(elems, a)
+                    if (b < len(elems) and elems[b].type == "OPTION" and elems[b].indent == elems[a].indent - 1
+                            and elems[a].type != "OPTION"):
+                        elems.move(b, a)  # last child of an option: hop into the next option
+                        moved = True
+                        continue
                     if b >= len(elems) or elems[b].indent != elems[a].indent or b in blocked:
                         blocked.add(a)
                         continue
@@ -258,6 +271,17 @@ class UIB_OT_indent(_ElementOp):
                 for a in tops:
                     b = tree.block_end(elems, a)
                     p = _prev_sibling(elems, a)
+                    if p is not None and elems[p].type == "ENUM":
+                        options = branches._direct_children(elems, p, "OPTION")
+                        if not options:
+                            continue
+                        target = tree.block_end(elems, options[0])  # end of the first option's contents
+                        for k in range(b - a):
+                            elems.move(a + k, target + k)
+                        for k in range(target, target + (b - a)):
+                            elems[k].indent += 2  # Choice -> Option -> element
+                        changed += 1
+                        continue
                     if p is None or not el.can_nest(elems[p].type):
                         continue
                     for k in range(a, b):
@@ -272,13 +296,17 @@ class UIB_OT_indent(_ElementOp):
                     parent = a - 1
                     while parent >= 0 and elems[parent].indent >= indent:
                         parent -= 1
+                    levels = 1
+                    if elems[parent].type == "OPTION" and elems[a].type != "OPTION":
+                        parent = branches._parent_index(elems, parent)  # leave the Choice, not just the option
+                        levels = 2
                     target = tree.block_end(elems, parent)
                     if target > b:  # move behind the parent's block so later siblings stay put
                         for _ in range(b - a):
                             elems.move(a, target - 1)
                         a, b = target - (b - a), target
                     for k in range(a, b):
-                        elems[k].indent -= 1
+                        elems[k].indent -= levels
                     changed += 1
             tree.normalize(elems)
         branches.sync_all(s)

@@ -94,7 +94,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 5, 0), updater.local_version()
+    assert updater.local_version() == (1, 5, 1), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -253,7 +253,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 5, 0), updater.local_version()
+    assert updater.local_version() == (1, 5, 1), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -792,6 +792,52 @@ def test_branches():
     s.active_index = 2
     bpy.ops.ui_builder.add(type="STRING")        # leaf: right below it, same level
     assert s.elements[3].type == "STRING" and s.elements[3].indent == 2
+
+    # tabs: nest controls into a Choice's options, hop between options, and back out
+    s.elements.clear()
+    bpy.ops.ui_builder.add(type="PANEL")
+    bpy.ops.ui_builder.add(type="ENUM")
+    s.elements[1].label = "View"
+    s.elements[1].enum_items = "Shape, Material, Settings"
+    s.active_index = 1
+    bpy.ops.ui_builder.add(type="LABEL"); s.elements[len(s.elements) - 1].label = "x"
+    bpy.ops.ui_builder.add(type="LABEL"); s.elements[len(s.elements) - 1].label = "y"
+
+    def tabs():
+        return [(e.label, e.indent) for e in s.elements]
+
+    assert tabs() == [("Panel", 0), ("View", 1), ("Shape", 2), ("Material", 2), ("Settings", 2), ("x", 1), ("y", 1)], tabs()
+    s.active_index = 5
+    bpy.ops.ui_builder.indent(direction="IN")          # x -> first option
+    assert tabs() == [("Panel", 0), ("View", 1), ("Shape", 2), ("x", 3), ("Material", 2), ("Settings", 2), ("y", 1)], tabs()
+    assert s.elements[s.active_index].label == "x"
+    bpy.ops.ui_builder.move(direction="DOWN")          # x hops into Material
+    assert tabs() == [("Panel", 0), ("View", 1), ("Shape", 2), ("Material", 2), ("x", 3), ("Settings", 2), ("y", 1)], tabs()
+    bpy.ops.ui_builder.move(direction="DOWN")          # ... then Settings
+    assert tabs()[3:6] == [("Material", 2), ("Settings", 2), ("x", 3)], tabs()
+    assert bpy.ops.ui_builder.move(direction="DOWN") == {"CANCELLED"}  # nothing after the last option
+    bpy.ops.ui_builder.move(direction="UP")            # and back
+    assert tabs()[2:5] == [("Shape", 2), ("Material", 2), ("x", 3)], tabs()
+    bpy.ops.ui_builder.move(direction="UP")
+    assert tabs()[2:4] == [("Shape", 2), ("x", 3)], tabs()
+    bpy.ops.ui_builder.indent(direction="OUT")         # out of the whole Choice, not just the option
+    assert tabs() == [("Panel", 0), ("View", 1), ("Shape", 2), ("Material", 2), ("Settings", 2), ("x", 1), ("y", 1)], tabs()
+    # several at once, and a container with children
+    s.elements[5].selected = True; s.elements[6].selected = True; s.active_index = 5
+    bpy.ops.ui_builder.indent(direction="IN")
+    assert tabs() == [("Panel", 0), ("View", 1), ("Shape", 2), ("x", 3), ("y", 3), ("Material", 2), ("Settings", 2)], tabs()
+    for e in s.elements:
+        e.selected = False
+    # contents follow the selected option in the mockup and export
+    s.elements[1].enum_value = "shape"
+    log = []
+    Drawer(s).nodes(FakeLayout(log), tree.build(s.elements))
+    assert "x" in [kw.get("text") for m, a, kw in log if m == "label"]
+    s.elements[1].enum_value = "settings"
+    log = []
+    Drawer(s).nodes(FakeLayout(log), tree.build(s.elements))
+    assert "x" not in [kw.get("text") for m, a, kw in log if m == "label"]
+    assert "if props.view == \"shape\":" in export.Exporter(s).python()
 
     # merged Color element
     s.elements.clear()
