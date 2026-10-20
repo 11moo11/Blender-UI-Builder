@@ -63,6 +63,8 @@ class UIB_Element(bpy.types.PropertyGroup):
     icon: StringProperty(name="Icon", default="NONE")
     indent: IntProperty(default=0, min=0)
     expanded: BoolProperty(name="Expanded", default=True)
+    hide: BoolProperty(name="Hide in Mockup", description="Hide this element (and everything inside it) in the "
+                       "mockup preview, like the eye in the Outliner. It is still exported", default=False)
     fold: BoolProperty(name="Fold", description="Hide this element's children in the list", default=False)
     option_id: StringProperty(description="For Option rows: identifier of the Choice option this row stands for")
     selected: BoolProperty(name="Select", description="Tick to act on several elements at once. Click and "

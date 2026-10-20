@@ -7,11 +7,26 @@ from . import icons, import_ops, locmap, preferences, updater
 from .properties import settings
 
 
+def _under_hidden(elems, index):
+    """True if an ancestor of element `index` is hidden."""
+    indent = elems[index].indent
+    for k in range(index - 1, -1, -1):
+        if elems[k].indent < indent:
+            if elems[k].hide:
+                return True
+            indent = elems[k].indent
+            if indent == 0:
+                break
+    return False
+
+
 class UIB_UL_elements(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         d = el.DEFS.get(item.type)
         elems = data.elements
         row = layout.row(align=True)
+        hidden = item.hide or _under_hidden(elems, index)
+        row.active = not hidden  # greyed like a hidden object in the Outliner
         row.prop(item, "selected", text="", emboss=False,
                  icon="CHECKBOX_HLT" if item.selected else "CHECKBOX_DEHLT")
         for _ in range(item.indent):
@@ -25,13 +40,14 @@ class UIB_UL_elements(bpy.types.UIList):
             sub = row.row()
             sub.enabled = False
             sub.label(text="Option")
-            return
-        row.label(text="", icon=d.icon if d else "QUESTION")
-        row.prop(item, "label", text="", emboss=False)
-        if d:
-            sub = row.row()
-            sub.enabled = False
-            sub.label(text=d.label)
+        else:
+            row.label(text="", icon=d.icon if d else "QUESTION")
+            row.prop(item, "label", text="", emboss=False)
+            if d:
+                sub = row.row()
+                sub.enabled = False
+                sub.label(text=d.label)
+        row.prop(item, "hide", text="", emboss=False, icon="HIDE_ON" if item.hide else "HIDE_OFF")
 
     def filter_items(self, context, data, propname):
         """Hide the children of folded elements."""
@@ -90,6 +106,8 @@ class UIB_MT_select(bpy.types.Menu):
                                    ("INVERT", "Invert", "ARROW_LEFTRIGHT"), ("CHILDREN", "Add Children", "OUTLINER"),
                                    ("SIBLINGS", "Same Level", "ALIGN_JUSTIFY")):
             l.operator("ui_builder.select", text=text, icon=icon).action = action
+        l.separator()
+        l.operator("ui_builder.visibility", text="Show All in Mockup", icon="HIDE_OFF").action = "SHOW_ALL"
 
 
 class UIB_MT_project(bpy.types.Menu):
@@ -134,6 +152,7 @@ class UIB_PT_main(bpy.types.Panel):
         col = row.column(align=True)
         col.menu("UIB_MT_select", icon="RESTRICT_SELECT_OFF", text="")
         col.separator()
+        col.operator("ui_builder.visibility", icon="HIDE_OFF", text="").action = "TOGGLE"
         col.operator("ui_builder.remove", icon="REMOVE", text="")
         col.operator("ui_builder.duplicate", icon="DUPLICATE", text="")
         col.separator()

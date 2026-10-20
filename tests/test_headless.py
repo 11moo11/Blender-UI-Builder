@@ -94,7 +94,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 7, 4), updater.local_version()
+    assert updater.local_version() == (1, 8, 0), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -253,7 +253,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 7, 4), updater.local_version()
+    assert updater.local_version() == (1, 8, 0), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -1065,7 +1065,43 @@ def test_tooltips():
     print("tooltips OK")
 
 
+def test_visibility():
+    from ui_builder import ui
+    from ui_builder.preview import Drawer
+    s.elements.clear()
+    for typ, label, ind in [("PANEL", "P", 0), ("ROW", "R", 1), ("LABEL", "a", 2), ("LABEL", "b", 2), ("LABEL", "c", 1)]:
+        from ui_builder.operators import new_element
+        new_element(s, typ, len(s.elements), ind, label)
+
+    def texts():
+        log = []
+        Drawer(s).nodes(FakeLayout(log), tree.build(s.elements))
+        return [kw.get("text") for m, a, kw in log if m == "label"]
+
+    assert texts()[-3:] == ["a", "b", "c"]
+    s.active_index = 3
+    bpy.ops.ui_builder.visibility()                   # hide the active one (b)
+    assert s.elements[3].hide and "b" not in texts() and "a" in texts()
+    s.active_index = 1
+    bpy.ops.ui_builder.visibility()                   # hide the row: its children go with it
+    assert "a" not in texts() and "c" in texts()
+    assert ui._under_hidden(s.elements, 2) and not ui._under_hidden(s.elements, 4)
+    bpy.ops.ui_builder.visibility()                   # all targets hidden -> show
+    assert not s.elements[1].hide
+    s.elements[2].selected = True; s.elements[4].selected = True
+    bpy.ops.ui_builder.visibility()                   # ticked set
+    assert s.elements[2].hide and s.elements[4].hide and "a" not in texts() and "c" not in texts()
+    bpy.ops.ui_builder.visibility(action="SHOW_ALL")
+    assert not any(e.hide for e in s.elements) and texts()[-3:] == ["a", "b", "c"]
+    s.elements[2].hide = True
+    assert "a" not in texts()
+    assert "\"a\"" in export.Exporter(s).python()    # hiding is a mockup aid: the export still has it
+    ui.UIB_UL_elements.draw_item(types.SimpleNamespace(layout_type="DEFAULT"), bpy.context, FakeLayout([]), s, s.elements[2], 0, None, "", 2)
+    print("visibility OK")
+
+
 check_icons()
+test_visibility()
 test_tooltips()
 test_separator()
 test_self_import()

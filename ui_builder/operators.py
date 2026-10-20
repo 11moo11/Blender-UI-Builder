@@ -371,6 +371,31 @@ class UIB_OT_replace(_ElementOp):
         return {"FINISHED"}
 
 
+class UIB_OT_visibility(_ElementOp):
+    """Show or hide the ticked elements (or the active one) in the mockup, like the eye in the Outliner"""
+    bl_idname = "ui_builder.visibility"
+    bl_label = "Toggle Visibility"
+    bl_options = {"REGISTER", "UNDO"}
+
+    action: EnumProperty(items=[("TOGGLE", "Toggle", "Hide them, or show them if all are already hidden"),
+                                ("SHOW_ALL", "Show All", "Show every element again")], default="TOGGLE")
+
+    def execute(self, context):
+        s = settings(context)
+        elems = s.elements
+        if self.action == "SHOW_ALL":
+            for e in elems:
+                e.hide = False
+        else:
+            with operand(s):
+                targets = [e for e in elems if e.selected]
+                hide = any(not e.hide for e in targets)
+                for e in targets:
+                    e.hide = hide
+        _redraw(context)
+        return {"FINISHED"}
+
+
 class UIB_OT_select(bpy.types.Operator):
     """Change which elements are ticked (ticked elements are moved / nested / deleted together)"""
     bl_idname = "ui_builder.select"
@@ -457,5 +482,5 @@ def _redraw(context):
             area.tag_redraw()
 
 
-classes = (UIB_OT_add, UIB_OT_remove, UIB_OT_duplicate, UIB_OT_move, UIB_OT_indent, UIB_OT_replace, UIB_OT_select,
+classes = (UIB_OT_add, UIB_OT_remove, UIB_OT_duplicate, UIB_OT_move, UIB_OT_indent, UIB_OT_replace, UIB_OT_visibility, UIB_OT_select,
            UIB_OT_clear, UIB_OT_pick_icon)

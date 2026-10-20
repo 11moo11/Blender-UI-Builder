@@ -102,6 +102,8 @@ class Drawer:
 
     def node(self, layout, n):
         e = n.elem
+        if e.hide:
+            return
         d = el.DEFS.get(e.type)
         if d is None:
             return
@@ -139,7 +141,7 @@ class Drawer:
         for child in n.children:
             if child.elem.type != "OPTION":
                 self.node(layout, child)
-            elif child.elem.option_id == chosen and child.children:
+            elif child.elem.option_id == chosen and child.children and not child.elem.hide:
                 col = layout.column()
                 self.nodes(col, child.children)
 
