@@ -178,6 +178,10 @@ def _pick_icon(layout, e):
     row.operator("ui_builder.pick_icon", text=e.icon if icon else "Pick Icon...", icon=icon or "VIEWZOOM")
 
 
+_TYPE_PROPS = {"ENUM": "enum_style", "BOOL": "bool_style", "SEPARATOR": "separator_style",
+               "PROGRESS": "progress_type"}  # the "Type" selector, shown first
+
+
 def draw_element(layout, e):
     d = el.DEFS[e.type]
     t = e.type
@@ -186,101 +190,109 @@ def draw_element(layout, e):
         box = layout.box()
         box.label(text="Option: %s" % e.label, icon="RIGHTARROW_THIN")
         for line in ("Everything inside this row is shown only", "while this option is selected.",
-                     "Rename or reorder options in the Choice's", "Options field."):
+                     "Rename or reorder options in the Choice's", "Selectables field."):
             box.label(text=line)
         _pick_icon(layout.column(), e)  # the icon is used on the Choice's buttons / dropdown entries
         return
-    col = layout.column()
-    col.label(text=d.label, icon=d.icon)
-    col.prop(e, "label", text="Name")
+
+    # header: big Pick Icon button next to the element type
+    head = layout.row()
+    if d.icon_ok:
+        pick = head.row(align=True)
+        pick.scale_y = 2.14
+        _pick_icon(pick, e)
+    title = head.row(align=True)
+    title.scale_x = 2.0
+    title.alignment = "LEFT"
+    title.label(text=d.label, icon=d.icon)
+    if t in _TYPE_PROPS:
+        layout.prop(e, _TYPE_PROPS[t], text="Type")
+    try:
+        layout.separator(type="LINE", factor=2.62)
+    except TypeError:  # older Blender without separator types
+        layout.separator()
+
+    # identity
+    layout.prop(e, "label", text="Name")
     if d.ident:
-        row = col.row(align=True)
+        row = layout.row(align=True)
         row.prop(e, "ident", text="ID")
         row.prop(e, "auto_ident", text="", icon="LINKED" if e.auto_ident else "UNLINKED", toggle=True)
     if d.desc:
-        col.prop(e, "description", text="Tooltip")
-    if d.icon_ok:
-        _pick_icon(col, e)
+        layout.prop(e, "description", text="Tooltip")
 
-    col.separator()
+    # what is specific to this element type
     if t == "TEXT_LINES":
-        col.label(text="Separate lines with |  in the name")
+        layout.label(text="Separate lines with |  in the name")
     elif t == "PANEL":
-        col.prop(e, "default_closed")
-        col.prop(e, "header_checkbox")
+        layout.prop(e, "default_closed")
+        layout.prop(e, "header_checkbox")
     elif t in ("ROW", "COLUMN", "SPLIT", "GRID"):
-        col.prop(e, "align")
+        layout.prop(e, "align")
         if t == "SPLIT":
-            col.prop(e, "split_factor")
+            layout.prop(e, "split_factor")
         if t == "GRID":
-            col.prop(e, "grid_columns")
-            col.prop(e, "grid_row_major")
-            col.prop(e, "grid_even_columns")
-            col.prop(e, "grid_even_rows")
-    elif t == "SEPARATOR":
-        col.prop(e, "separator_style")
-        col.prop(e, "spacer_factor")
-    elif t == "SPACER":
-        col.prop(e, "spacer_factor")
+            layout.prop(e, "grid_columns")
+            layout.prop(e, "grid_row_major")
+            layout.prop(e, "grid_even_columns")
+            layout.prop(e, "grid_even_rows")
+    elif t in ("SEPARATOR", "SPACER"):
+        layout.prop(e, "spacer_factor")
     elif t == "BOOL":
-        col.prop(e, "bool_style")
-        col.prop(e, "bool_value", text="Default")
+        layout.prop(e, "bool_value", text="Default Value")
     elif t in ("INT", "FLOAT", "SLIDER", "FACTOR", "PERCENT", "ANGLE", "DISTANCE", "STRING", "FILEPATH",
                "DIRPATH", "COLOR", "COLOR_ALPHA", "VEC2", "VEC3", "EULER", "SEARCH", "PROGRESS"):
-        col.prop(e, el.value_attr(e), text="Default")
+        layout.prop(e, el.value_attr(e), text="Default Value")
         if t == "COLOR":
-            col.prop(e, "use_alpha")
+            layout.prop(e, "use_alpha")
         if t == "SEARCH":
-            col.prop(e, "search_source")
-        if t == "PROGRESS":
-            col.prop(e, "progress_type")
+            layout.prop(e, "search_source")
         if t in ("INT", "FLOAT", "SLIDER", "FACTOR", "PERCENT", "ANGLE", "DISTANCE"):
-            col.prop(e, "use_range")
+            layout.prop(e, "use_range")
             if e.use_range:
-                r = col.row(align=True)
+                r = layout.row(align=True)
                 r.prop(e, "range_min")
                 r.prop(e, "range_max")
     elif t in ("ENUM", "MENU"):
-        col.prop(e, "enum_items")
+        layout.prop(e, "enum_items", text="Selectables")
         if "PLACEHOLDER_" in e.enum_items:
-            warn = col.box()
+            warn = layout.box()
             warn.alert = True
             warn.label(text="Placeholder options: the real ones", icon="ERROR")
             warn.label(text="could not be read. Replace them.")
-        if t == "ENUM":
-            col.prop(e, "enum_style")
-            if e.enum_style != "DROPDOWN":
-                col.prop(e, "enum_icon_only")
-            box = col.box()
-            box.label(text="Each option has its own row in the list.", icon="INFO")
-            box.label(text="Put controls under an option to show")
-            box.label(text="them only when it is chosen. Give an option")
-            box.label(text="an icon for icon buttons.")
-        col.prop(e, "enum_value", text="Default")
+        if t == "ENUM" and e.enum_style != "DROPDOWN":
+            layout.prop(e, "enum_icon_only")
+        layout.prop(e, "enum_value", text="Default Value")
     elif t in ("POINTER", "TEMPLATE_ID"):
-        col.prop(e, "id_type")
+        layout.prop(e, "id_type")
     elif t == "LIST":
-        col.prop(e, "list_rows")
+        layout.prop(e, "list_rows")
     elif t == "IMAGE_PREVIEW":
-        col.prop(e, "preview_scale")
+        layout.prop(e, "preview_scale")
     elif t == "BUTTON":
-        sub = col.box()
-        sub.label(text="Exports an operator stub", icon="INFO")
+        layout.label(text="Exports an operator stub", icon="INFO")
 
+    # layout modifiers
     box = layout.box()
-    box.label(text="Layout Modifiers", icon="MODIFIER")
-    m = box.column(align=True)
-    m.prop(e, "enabled")
-    m.prop(e, "active")
-    m.prop(e, "alert")
-    m.prop(e, "scale_x")
-    m.prop(e, "scale_y")
-    m.prop(e, "emboss")
-    m.prop(e, "alignment")
+    col = box.column(align=True)
+    grid = col.grid_flow(row_major=True, even_columns=True, even_rows=True)
+    grid.prop(e, "enabled")
+    grid.prop(e, "alert")
     if t in el.SPLIT_TYPES:
-        m.prop(e, "prop_split", text="Label on the Left")
+        grid.prop(e, "prop_split", text="Show Name on Left")
     elif d.container and t not in ("POPOVER", "OPTION"):
-        m.prop(e, "prop_split", text="Property Split (children)")
+        grid.prop(e, "prop_split", text="Property Split (children)")
+    col.prop(e, "scale_x")
+    col.prop(e, "scale_y")
+    col.prop(e, "emboss")
+    col.prop(e, "alignment")
+
+    if t == "ENUM":
+        info = layout.box()
+        info.label(text="Each option has its own row in the list.", icon="INFO")
+        info.label(text="Put controls under an option to show")
+        info.label(text="them only when it is chosen. Give an option")
+        info.label(text="an icon for icon buttons.")
 
 
 class UIB_PT_location(bpy.types.Panel):

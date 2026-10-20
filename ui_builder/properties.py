@@ -98,7 +98,7 @@ class UIB_Element(bpy.types.PropertyGroup):
                             description="Expand fills the width. Left / Center / Right pack the control at its "
                                         "natural size and align it (layout.alignment)")
     align: BoolProperty(name="Align", description="Join the children without gaps", default=False)
-    prop_split: BoolProperty(name="Property Split",
+    prop_split: BoolProperty(name="Show Name on Left",
                              description="Form layout (use_property_split): the name is shown on the left and "
                                          "the value on the right, like the Properties editor. For a control "
                                          "it moves the label beside it; for a container it applies to "
@@ -118,14 +118,14 @@ class UIB_Element(bpy.types.PropertyGroup):
     # Leaf options
     bool_style: EnumProperty(name="Style", default="CHECKBOX", items=[
         ("CHECKBOX", "Checkbox", ""), ("TOGGLE", "Toggle Button", ""), ("ICON", "Icon Toggle", "Needs an icon")])
-    enum_style: EnumProperty(name="Style", default="DROPDOWN", items=[
+    enum_style: EnumProperty(name="Type", default="DROPDOWN", items=[
         ("DROPDOWN", "Dropdown", ""),
         ("EXPAND", "Buttons (stacked)", "Buttons one above the other, like an expanded dropdown in a column"),
         ("ROW", "Buttons (side by side)", "Buttons in one row")])
     enum_icon_only: BoolProperty(name="Icons Only", description="Show only the icons of the options as buttons "
                                  "(set an icon on each Option row)", default=False)
     enum_icons: StringProperty(description="Option icons found by the importer, applied to new Option rows")
-    enum_items: StringProperty(name="Options", update=_on_enum_items,
+    enum_items: StringProperty(name="Selectables", update=_on_enum_items,
                                description="Comma separated option names. Each one gets its own row in the list",
                                default="Option A, Option B, Option C")
     use_alpha: BoolProperty(name="Alpha", description="Add an alpha channel (RGBA)", default=False)
@@ -154,7 +154,7 @@ class UIB_Element(bpy.types.PropertyGroup):
     string_value: StringProperty(name="Value", description=_VALUE_TIP)
     file_value: StringProperty(name="Value", description=_VALUE_TIP, subtype="FILE_PATH")
     dir_value: StringProperty(name="Value", description=_VALUE_TIP, subtype="DIR_PATH")
-    enum_value: EnumProperty(name="Value", description=_VALUE_TIP, items=_enum_value_items)
+    enum_value: EnumProperty(name="Default Value", description=_VALUE_TIP, items=_enum_value_items)
     color_value: FloatVectorProperty(name="Value", description=_VALUE_TIP, size=3, subtype="COLOR", min=0.0, max=1.0,
                                      default=(0.8, 0.8, 0.8))
     color_alpha_value: FloatVectorProperty(name="Value", description=_VALUE_TIP, size=4, subtype="COLOR", min=0.0, max=1.0,
