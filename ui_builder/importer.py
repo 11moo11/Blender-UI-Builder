@@ -722,7 +722,33 @@ def _prefs_instance(cls):
         return None
 
 
-def _record(cls, ctx, kind, overrides):
+def _hoist_choices(root):
+    """Move a Choice that is the last child of a row/column out to the container's level.
+
+    Tabs are often drawn in their own little row/column, with the controls that depend on them
+    drawn *after* that container. Hoisting makes those controls siblings of the Choice, where they
+    can be tied to its options.
+    """
+    def walk(node):
+        i = 0
+        while i < len(node.children):
+            c = node.children[i]
+            walk(c)
+            if c.type in ("ROW", "COLUMN") and c.children and c.children[-1].type in ("ENUM", "BOOL") \
+                    and c.children[-1].meta:
+                moved = c.children.pop()
+                if c.type == "ROW" and moved.type == "ENUM" and moved.fields.get("enum_style") == "EXPAND":
+                    moved.fields["enum_style"] = "ROW"  # it was laid out side by side by that row
+                node.children.insert(i + 1, moved)
+                if not c.children:
+                    node.children.pop(i)
+                    i -= 1
+                i += 1
+            i += 1
+    walk(root)
+
+
+def _record(cls, ctx, kind, overrides, hoist=False):
     """Draw once, with the given (data, property, value) overrides applied temporarily."""
     item = _root_item(cls, kind)
     ctx.count = 0
@@ -744,6 +770,9 @@ def _record(cls, ctx, kind, overrides):
                 setattr(data, prop, old)
             except Exception:
                 pass
+    if hoist:
+        _hoist_choices(item)
+    simplify(item)  # tidy first: wrapper rows/columns around a Choice must not hide what follows it
     return item, error
 
 
@@ -767,6 +796,7 @@ class _Explorer:
     def __init__(self, cls, ctx, kind):
         self.cls, self.ctx, self.kind = cls, ctx, kind
         self.budget = MAX_RECORDS
+        self.branched = False
 
     def region(self, root, path, start, overrides, depth):
         container = _get(root, path)
@@ -796,7 +826,7 @@ class _Explorer:
                 return
             self.budget -= 1
             ov = overrides + [(meta["data"], meta["prop"], meta.get("values", {}).get(rid, rid))]
-            root_v, _ = _record(self.cls, self.ctx, self.kind, ov)
+            root_v, _ = _record(self.cls, self.ctx, self.kind, ov, hoist=True)
             cont_v = _get(root_v, path)
             same = (cont_v is not None and i < len(cont_v.children) and cont_v.children[i].meta
                     and cont_v.children[i].meta["prop"] == meta["prop"])
@@ -822,6 +852,7 @@ class _Explorer:
             opt.children = list(content)
             options.append(opt)
         it.children = options
+        self.branched = True
         if it.type == "BOOL":
             it.fields["use_branches"] = True
         container.children = container.children[:i + 1] + shared
@@ -834,6 +865,15 @@ def build_panel(cls, ctx, kind="PANEL", explore=False):
     property) so conditional content ends up under the matching Option row.
     """
     item, error = _record(cls, ctx, kind, [])
+    if explore and not error:
+        try:
+            hoisted, _ = _record(cls, ctx, kind, [], hoist=True)
+            explorer = _Explorer(cls, ctx, kind)
+            explorer.region(hoisted, [], 0, [], 0)
+            if explorer.branched:  # only keep the restructured drawing if it actually found branches
+                item = hoisted
+        except Exception:  # exploration is best effort: keep the plain drawing
+            pass
     if kind == "PANEL" and hasattr(cls, "draw_header"):
         try:
             head = Item("ROW")
@@ -842,11 +882,6 @@ def build_panel(cls, ctx, kind="PANEL", explore=False):
                 item.fields["header_checkbox"] = True
         except Exception:
             pass
-    if explore and not error:
-        try:
-            _Explorer(cls, ctx, kind).region(item, [], 0, [], 0)
-        except Exception as e:  # exploration is best effort: keep the baseline drawing
-            error = ""
     simplify(item)
     return item, error
 

@@ -94,7 +94,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 10, 0), updater.local_version()
+    assert updater.local_version() == (1, 10, 1), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -253,7 +253,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 10, 0), updater.local_version()
+    assert updater.local_version() == (1, 10, 1), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -1327,7 +1327,73 @@ def test_bool_branches():
     print("bool branches OK")
 
 
+def test_tabs_in_row():
+    """Tabs drawn in their own row, with the tab-dependent controls in a different container below."""
+    from ui_builder import importer
+    from ui_builder.operators import new_element
+    from bpy.props import EnumProperty, PointerProperty, StringProperty
+
+    class QP(bpy.types.PropertyGroup):
+        source: EnumProperty(name="Build From", items=[("RENDER", "Render", ""), ("FILES", "Files", "")], default="RENDER")
+        device: EnumProperty(name="Device", items=[("P", "Portrait", ""), ("G", "Go", "")])
+        path: StringProperty(name="Source Folder", subtype="DIR_PATH")
+
+    class QUILT_PT_main(bpy.types.Panel):
+        bl_label = "Quilt Creation"; bl_idname = "QUILT_PT_main"
+        bl_space_type = "VIEW_3D"; bl_region_type = "UI"; bl_category = "Quilt"
+
+        def draw(self, context):
+            p = context.scene.qp_props
+            lay = self.layout
+            col0 = lay.column(align=True)
+            col0.label(text="Build From:")
+            row = col0.row(align=True)
+            row.prop(p, "source", expand=True)          # the tabs sit in their own row
+            col = lay.column()                           # ... the dependent controls in another container
+            if p.source == "RENDER":
+                r1 = col.row(); r1.label(text="Device:"); r2 = col.row(); r2.prop(p, "device", text="")
+            else:
+                col.prop(p, "path")
+            lay.operator("object.select_all", text="Render")
+
+    for c in (QP, QUILT_PT_main):
+        bpy.utils.register_class(c)
+        c.__module__ = "quiltaddon"
+    bpy.types.Scene.qp_props = PointerProperty(type=QP)
+    try:
+        p = bpy.context.scene.qp_props
+        item, err = importer.build_panel(QUILT_PT_main, importer.Ctx(bpy.context), "PANEL", explore=True)
+        assert not err, err
+        shape = [(c.type, c.label) for c in item.children]
+        assert shape[0][0] == "ENUM" or any(c.type == "ENUM" for c in item.children), shape
+        enum = [c for c in item.children if c.type == "ENUM"][0]
+        assert [o.label for o in enum.children] == ["Render", "Files"], shape
+        by = {o.label: [c.label for c in o.children] for o in enum.children}
+        assert by["Render"] == ["Device"] and by["Files"] == ["Source Folder"], by
+        assert shape[-1] == ("BUTTON", "Render"), shape                      # drawn for every tab: stays outside
+        assert p.source == "RENDER"
+        assert enum.fields["enum_style"] == "ROW"                            # still side-by-side tabs
+        s.elements.clear()
+        importer.commit(s, [item], new_element, tree.normalize)
+        from ui_builder.preview import Drawer
+
+        def shown(v):
+            [e for e in s.elements if e.type == "ENUM"][0].enum_value = v
+            log = []
+            Drawer(s).nodes(FakeLayout(log), tree.build(s.elements))
+            return [kw.get("text") for m, a, kw in log if m in ("prop", "operator")]
+        assert "Device" in shown("render") and "Source Folder" not in shown("render")
+        assert "Source Folder" in shown("files") and "Device" not in shown("files")
+        assert "Render" in shown("files")
+    finally:
+        del bpy.types.Scene.qp_props
+        for c in (QUILT_PT_main, QP):
+            bpy.utils.unregister_class(c)
+    print("tabs in row OK")
+
+
 check_icons()
+test_tabs_in_row()
 test_bool_branches()
 test_explore()
 test_visibility()
