@@ -69,6 +69,11 @@ class UIB_OT_add(bpy.types.Operator):
 
     type: EnumProperty(items=_ADD_ITEMS)
 
+    @classmethod
+    def description(cls, context, properties):
+        tip = el.TIPS.get(properties.type, "")
+        return tip + " Added directly below the selected row." if tip else cls.__doc__
+
     def execute(self, context):
         s = settings(context)
         type_id = "PANEL" if self.type == "SUBPANEL" else self.type
@@ -325,6 +330,11 @@ class UIB_OT_replace(_ElementOp):
     bl_options = {"REGISTER", "UNDO"}
 
     type: EnumProperty(items=[(d.id, d.label, d.help) for d in el._DEFS])
+
+    @classmethod
+    def description(cls, context, properties):
+        tip = el.TIPS.get(properties.type, "")
+        return "Change the selected element(s) into this type, keeping children and settings. " + tip if tip else cls.__doc__
 
     def execute(self, context):
         s = settings(context)

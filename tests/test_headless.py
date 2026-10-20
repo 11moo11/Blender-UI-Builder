@@ -94,7 +94,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 7, 3), updater.local_version()
+    assert updater.local_version() == (1, 7, 4), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -253,7 +253,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 7, 3), updater.local_version()
+    assert updater.local_version() == (1, 7, 4), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -1052,7 +1052,21 @@ def _spec_calls(e):
     return [(sp.method, sp.args, sp.kwargs) for sp in el.leaf_specs(e)]
 
 
+def test_tooltips():
+    from types import SimpleNamespace as NS
+    from ui_builder import operators
+    for d in el._DEFS:
+        assert len(el.TIPS.get(d.id, "")) > 30, d.id          # every element explains itself
+        assert d.help == el.TIPS[d.id]
+        assert operators.UIB_OT_add.description(bpy.context, NS(type=d.id)).startswith(el.TIPS[d.id])
+        assert el.TIPS[d.id] in operators.UIB_OT_replace.description(bpy.context, NS(type=d.id))
+    assert "sub-panel" in operators.UIB_OT_add.description(bpy.context, NS(type="SUBPANEL")).lower() \
+        or "nested" in operators.UIB_OT_add.description(bpy.context, NS(type="SUBPANEL"))
+    print("tooltips OK")
+
+
 check_icons()
+test_tooltips()
 test_separator()
 test_self_import()
 test_enum_buttons()

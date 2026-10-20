@@ -101,6 +101,84 @@ _DEFS = (
     Def("PROGRESS", "Progress Bar", "TEMPLATES", "TIME", desc=True, help="Progress bar (layout.progress)."),
 )
 
+# Tooltips shown when hovering an item in the Add Element / Replace Selected menus.
+TIPS = {
+    "PANEL": "A panel: a section with its own collapsible header in the sidebar or editor. Everything inside "
+             "it is the panel's content. Put a Panel inside another Panel to make a sub-panel. "
+             "Exports a bpy.types.Panel class.",
+    "SUBPANEL": "A panel nested inside the selected panel and shown under its contents, with its own header. "
+                "Select a panel first. Exports a Panel with bl_parent_id.",
+    "COLLAPSE": "A framed box with a clickable header that hides or shows its contents. Use it for a "
+                "collapsible group inside a panel. Exports a box plus an 'expanded' checkbox property.",
+    "ROW": "Lays its children out left to right on one line. Use it for buttons or fields that belong side "
+           "by side. Exports layout.row().",
+    "COLUMN": "Stacks its children top to bottom. Mostly useful inside a Row or Split to give each side its "
+              "own stack. Exports layout.column().",
+    "BOX": "Draws its children inside a framed, shaded box to visually group them. Exports layout.box().",
+    "SPLIT": "Divides the width between its children by a factor (0.3 gives the first child 30%). Use it for a "
+             "narrow column next to a wide one. Exports layout.split(factor=...).",
+    "GRID": "Tiles its children in a grid of equal cells that wraps to the available width. Use it for icon "
+            "buttons or toggles. Exports layout.grid_flow().",
+    "SEPARATOR": "A divider line or an empty gap between elements. Pick Line or Space as the Type and use "
+                 "Scale Y to make it taller. Exports layout.separator().",
+    "SPACER": "Old name for an empty gap. Use Separator with the Space type instead.",
+    "LABEL": "A line of text, optionally with an icon. Display only: it can't be edited and stores nothing. "
+             "Exports layout.label().",
+    "TEXT_LINES": "Several lines of text in one element: separate the lines with | in the name. Display only. "
+                  "Exports one label per line.",
+    "BOOL": "A checkbox, toggle button or icon toggle that stores on/off. Exports a BoolProperty drawn with "
+            "layout.prop().",
+    "INT": "A whole-number field the user can type in or drag. The range can be limited. Exports an "
+           "IntProperty.",
+    "FLOAT": "A decimal-number field the user can type in or drag. The range can be limited. Exports a "
+             "FloatProperty.",
+    "SLIDER": "A decimal number shown as a draggable slider (0 to 1 unless you set a range). Exports a "
+              "FloatProperty drawn with slider=True.",
+    "FACTOR": "Draws exactly like Slider. Use Slider instead.",
+    "PERCENT": "A number shown with a % sign, from 0 to 100. Exports a FloatProperty with subtype "
+               "PERCENTAGE.",
+    "ANGLE": "A rotation entered in degrees (stored in radians). Exports a FloatProperty with subtype ANGLE.",
+    "DISTANCE": "A length that follows the scene's unit settings (m, cm, ft...). Exports a FloatProperty "
+                "with subtype DISTANCE.",
+    "STRING": "A single-line text box the user can type in. Exports a StringProperty.",
+    "FILEPATH": "A text box with a file-browser button for picking a file. Exports a StringProperty with "
+                "subtype FILE_PATH.",
+    "DIRPATH": "A text box with a file-browser button for picking a folder. Exports a StringProperty with "
+               "subtype DIR_PATH.",
+    "ENUM": "Choice: pick one value from a list, shown as a dropdown or as buttons. Every option gets its own "
+            "row in the list; controls placed under an option appear only while that option is selected "
+            "(use this for tabs). Exports an EnumProperty.",
+    "OPTION": "One option of a Choice. Its children appear only while this option is selected.",
+    "COLOR": "A color swatch with a picker. Tick Alpha to add transparency. Exports a FloatVectorProperty "
+             "with subtype COLOR.",
+    "COLOR_ALPHA": "Superseded by Color with the Alpha option.",
+    "VEC2": "Two number fields (X, Y) for a 2D value. Exports a FloatVectorProperty of size 2.",
+    "VEC3": "Three number fields (X, Y, Z), e.g. a position or size. Exports a FloatVectorProperty of size 3.",
+    "EULER": "Three rotation fields (X, Y, Z) in degrees. Exports a FloatVectorProperty with subtype EULER.",
+    "POINTER": "A selector for one Blender data-block: Object, Material, Collection, Image or World. Exports a "
+               "PointerProperty.",
+    "SEARCH": "A text box with a searchable list of Blender data (objects, materials...). Stores the picked "
+              "name as text. Exports a StringProperty drawn with prop_search().",
+    "BUTTON": "A clickable button that runs an action. Exports an operator class stub with a TODO for you "
+              "(or an AI) to implement.",
+    "MENU": "A button that opens a menu of actions; each item runs an operator. It does not store a value "
+            "(use Choice for that). Exports a Menu class plus one operator stub per item.",
+    "POPOVER": "A button that opens a floating panel containing its children. Exports a second panel class "
+               "used as a popover.",
+    "LIST": "A scrollable list of items with a selected row, like the lists in Blender's modifier panels. The "
+            "mockup shows demo items. Exports a UIList class plus a collection and an index property.",
+    "TEMPLATE_ID": "A data-block selector with browse, new and unlink buttons (like choosing a material). "
+                   "Exports a PointerProperty drawn with template_ID().",
+    "COLOR_PICKER": "A large color wheel with a value slider. Exports a color property drawn with "
+                    "template_color_picker().",
+    "IMAGE_PREVIEW": "A large icon / thumbnail area (template_icon). The mockup shows a placeholder; supply "
+                     "the real icon id in the code.",
+    "PROGRESS": "A progress bar or ring showing a 0 to 1 value. Exports a FloatProperty drawn with "
+                "layout.progress().",
+}
+for _d in _DEFS:
+    _d.help = TIPS.get(_d.id, _d.help)
+
 DEFS = {d.id: d for d in _DEFS}
 
 
