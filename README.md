@@ -24,7 +24,8 @@ Open the 3D Viewport sidebar (`N`) and pick the **UI Builder** tab.
 | Select several | Tick the checkbox at the start of each row (click and drag down the checkboxes to tick many), or use the **Select** menu above the buttons (All / None / Invert / Add Children / Same Level). |
 | Reorder / nest | Buttons next to the list act on all ticked rows (or the active row if none are ticked): ↑↓ reorder (children move with their parent; a group stops at the top or bottom as one), → moves into the container above, ← moves out, duplicate and delete work on the group too. |
 | Tweak | **Selected Element**: icon picker, tooltip, default value, options, and layout modifiers (enabled, active, alert, scale, emboss, alignment). |
-| Preview | The **Mockup** tab (3D Viewport sidebar) and the **Scene** tab of the Properties editor draw the UI with real Blender widgets. Buttons are inert placeholders. |
+| Preview | Use **Mockup Beside** (above the list) to split the area and show the mockup next to the builder, or **Mockup Window** to open it in its own window (drag it to another monitor). |
+| Preview (tabs) | The **Mockup** tab (3D Viewport sidebar) and the **Scene** tab of the Properties editor draw the UI with real Blender widgets. Buttons are inert placeholders. |
 | Export | **Export** panel: choose a format, then *Text Editor*, *Copy* or *Save…*. |
 
 New to it? **Project menu (▾ in the header) > Load Example**.

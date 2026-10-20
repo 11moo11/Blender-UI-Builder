@@ -126,6 +126,9 @@ class UIB_PT_main(bpy.types.Panel):
             else:
                 box.operator("ui_builder.restart_blender", icon="QUIT")
 
+        view = layout.row(align=True)
+        view.operator("ui_builder.mockup_split", text="Mockup Beside", icon="SPLIT_VERTICAL").direction = "VERTICAL"
+        view.operator("ui_builder.mockup_window", text="Mockup Window", icon="WINDOW")
         row = layout.row()
         row.template_list("UIB_UL_elements", "", s, "elements", s, "active_index", rows=8)
         col = row.column(align=True)

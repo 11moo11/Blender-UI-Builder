@@ -217,6 +217,7 @@ class UIB_PT_preview_view3d(bpy.types.Panel):
 class UIB_PT_preview_props(bpy.types.Panel):
     bl_label = "UI Builder Mockup"
     bl_idname = "UIB_PT_preview_props"
+    bl_order = -1000  # list first in the Scene tab so it is visible without scrolling
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "scene"
