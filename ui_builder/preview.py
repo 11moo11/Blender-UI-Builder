@@ -193,6 +193,10 @@ class Drawer:
 
 
 def draw_preview(layout, context):
+    from .importer import Rec
+    if isinstance(layout, Rec):  # being scraped by "Import From Addon": don't embed the live project
+        layout.label(text="Live mockup of the current project", icon="INFO")
+        return
     s = context.scene.ui_builder
     roots = tree.build(s.elements)
     if not roots:
@@ -209,6 +213,7 @@ class UIB_PT_preview_view3d(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "Mockup"
+    uib_no_import = True  # its content is the live project, not a fixed layout
 
     def draw(self, context):
         draw_preview(self.layout, context)
@@ -221,6 +226,7 @@ class UIB_PT_preview_props(bpy.types.Panel):
     bl_space_type = "PROPERTIES"
     bl_region_type = "WINDOW"
     bl_context = "scene"
+    uib_no_import = True
 
     def draw(self, context):
         draw_preview(self.layout, context)

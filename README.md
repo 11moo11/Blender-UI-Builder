@@ -60,6 +60,8 @@ What is scraped for each field: the declared **default** (not the live runtime v
 
 After an import every fold is rolled up, so you start from a tidy outline of panels and expand what you need.
 
+UI Builder can import itself. The live **Mockup** panels are left out (their content is your current project, not a fixed layout), and any panel, popover or menu that reaches itself while being scraped is skipped, so it always terminates. Use *Append* if you don't want to replace the project you have open.
+
 Limits: panels whose draw code needs context that isn't there (for example a selected object) are imported up to the point where they stop, and you get a warning. Unsupported templates appear as a `(template_x)` label placeholder. Select an object / open the right editor first for the best result.
 
 ### Elements

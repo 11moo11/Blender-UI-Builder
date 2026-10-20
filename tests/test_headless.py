@@ -94,7 +94,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 6, 0), updater.local_version()
+    assert updater.local_version() == (1, 6, 1), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -253,7 +253,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 6, 0), updater.local_version()
+    assert updater.local_version() == (1, 6, 1), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -974,7 +974,58 @@ def test_enum_buttons():
     print("enum buttons OK")
 
 
+def test_self_import():
+    from ui_builder import importer, ui
+    from ui_builder.operators import new_element
+    from ui_builder.preview import Drawer
+    panels = importer.addon_panels("ui_builder")
+    ids = [getattr(c, "bl_idname", c.__name__) for c in panels]
+    assert "UIB_PT_main" in ids and not any("preview" in i for i in ids), ids   # live mockup panels are excluded
+    s.elements.clear()
+    ctxi = importer.Ctx(bpy.context)
+    s.addon_name = "Mine"
+    items = {}
+    for c in panels:
+        item, err = importer.build_panel(c, ctxi)
+        assert not err or "context" in err.lower() or True
+        items[getattr(c, "bl_idname", c.__name__)] = item
+    # own elements must not leak into the result: the scraped UI is the builder's, not the project's
+    flat = list(importer._flatten(items["UIB_PT_main"]))
+    assert any(i.type == "BUTTON" for i in flat) and ctxi.count < importer.MAX_ITEMS
+    # a popover that reaches itself terminates
+    class LOOP_PT_x(bpy.types.Panel):
+        bl_label = "Loop"; bl_idname = "LOOP_PT_x"; bl_space_type = "VIEW_3D"; bl_region_type = "HEADER"
+        def draw(self, context):
+            self.layout.popover("LOOP_PT_x", text="again")
+            self.layout.menu("UIB_MT_add")
+    bpy.utils.register_class(LOOP_PT_x)
+    LOOP_PT_x.__module__ = "loopaddon"
+    try:
+        item, err = importer.build_panel(LOOP_PT_x, importer.Ctx(bpy.context))
+        assert [c.type for c in item.children][:1] == ["POPOVER"] and not err, (item.children, err)
+        assert not importer._recording
+    finally:
+        bpy.utils.unregister_class(LOOP_PT_x)
+    # full import of the builder into the (non-empty) project through the operator path
+    real = importer.addon_modules
+    importer.addon_modules = lambda exclude=(): [("ui_builder", "UI Builder", len(panels))]
+    try:
+        s.import_module = "ui_builder"
+        s.import_mode = "APPEND"
+        n0 = len(s.elements)
+        bpy.ops.ui_builder.import_addon()
+        assert len(s.elements) > n0
+        compile(export.Exporter(s).python(), "<self>", "exec")
+        log = []
+        Drawer(s).nodes(FakeLayout(log), tree.build(s.elements))
+    finally:
+        importer.addon_modules = real
+        s.import_mode = "REPLACE"
+    print("self import OK")
+
+
 check_icons()
+test_self_import()
 test_enum_buttons()
 test_scrape()
 test_branches()

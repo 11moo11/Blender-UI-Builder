@@ -188,7 +188,7 @@ _addon_items_cache = []
 def _addon_items(self, context):
     from . import importer
     global _addon_items_cache
-    items = [(m, name, "%d panel(s)" % n) for m, name, n in importer.addon_modules(exclude={__package__})]
+    items = [(m, name, "%d panel(s)" % n) for m, name, n in importer.addon_modules()]
     _addon_items_cache = items or [("NONE", "(no other addon with panels is enabled)", "")]
     return _addon_items_cache
 

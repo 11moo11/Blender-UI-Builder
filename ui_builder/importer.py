@@ -486,11 +486,18 @@ class _FakeSelf:
         self.__dict__[k] = v
 
 
+_recording = []  # classes being drawn right now: a panel/popover/menu that reaches itself is skipped
+
+
 def record_class(cls, ctx, root_item, method="draw"):
     fn = getattr(cls, method, None)
-    if fn is None:
+    if fn is None or cls in _recording:
         return
-    fn(_FakeSelf(cls, Rec(root_item, ctx)), ctx.context)
+    _recording.append(cls)
+    try:
+        fn(_FakeSelf(cls, Rec(root_item, ctx)), ctx.context)
+    finally:
+        _recording.remove(cls)
 
 
 # -- scanning & committing ---------------------------------------------------------------------
@@ -499,7 +506,8 @@ def addon_panels(module):
     out = []
     for cls in bpy.types.Panel.__subclasses__():
         mod = getattr(cls, "__module__", "") or ""
-        if (mod == module or mod.startswith(module + ".")) and getattr(cls, "is_registered", False):
+        if (mod == module or mod.startswith(module + ".")) and getattr(cls, "is_registered", False) \
+                and not getattr(cls, "uib_no_import", False):
             out.append(cls)
     return out
 
