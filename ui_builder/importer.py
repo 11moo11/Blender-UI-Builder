@@ -25,6 +25,7 @@ class Item:
         self.label = label
         self.fields = fields
         self.children = []
+        self.meta = None  # for Choices: what is needed to switch the real property and re-draw
 
 
 class Ctx:
@@ -65,7 +66,22 @@ def _icon(v):
     return valid_icon(v) if isinstance(v, str) else None
 
 
+def _operator_rna(data):
+    """RNA of an operator class used as `self` in its own draw() (dialogs)."""
+    try:
+        cls = data.__dict__.get("_cls") if isinstance(data, _FakeSelf) else None
+        if cls is not None and issubclass(cls, bpy.types.Operator):
+            mod, fn = cls.bl_idname.split(".", 1)
+            return getattr(getattr(bpy.ops, mod), fn).get_rna_type()
+    except Exception:
+        pass
+    return None
+
+
 def _rna_prop(data, name):
+    op = _operator_rna(data)
+    if op is not None:
+        return op.properties.get(name)
     try:
         return data.bl_rna.properties.get(name)
     except AttributeError:
@@ -73,6 +89,8 @@ def _rna_prop(data, name):
 
 
 def _current(data, name):
+    if _operator_rna(data) is not None:
+        return None  # an operator instance does not exist yet: the declared default is used instead
     try:
         return getattr(data, name)
     except Exception:
@@ -229,7 +247,12 @@ def item_from_prop(data, name, text, icon, expand, slider, toggle, icon_only, in
             for (ident_, _), (new_id, _) in zip(pairs, parsed):
                 if ident_ == want:
                     fx["enum_value"] = new_id
-            return done("MENU" if force == "MENU" else "ENUM", **fx)
+            made = done("MENU" if force == "MENU" else "ENUM", **fx)
+            if force != "MENU" and triples and len(pairs) >= 2 and not getattr(rna, "is_enum_flag", False):
+                made.meta = {"data": data, "prop": name, "cur": cur,
+                             "map": {a_: (new_id, nm) for (a_, nm), (new_id, _) in zip(pairs, parsed)},
+                             "ids": [a_ for a_, _ in pairs]}
+            return made
         if t == "POINTER":
             ft = rna.fixed_type.identifier if rna.fixed_type else ""
             if ft in _ID_NAMES:
@@ -336,6 +359,7 @@ class Rec:
 
     def prop(self, data, property, text=None, icon="NONE", expand=False, slider=False, toggle=-1,
              icon_only=False, index=-1, **kw):
+        data = _real(data)
         self._add(item_from_prop(data, property, text, icon, expand, slider, toggle, icon_only, index))
 
     def props_enum(self, data, property, **kw):
@@ -467,9 +491,10 @@ def _flatten(item):
 class _FakeSelf:
     """Stands in for `self` in Panel.draw: class attributes and helper methods still work."""
 
-    def __init__(self, cls, layout):
+    def __init__(self, cls, layout, instance=None):
         self.__dict__["_cls"] = cls
         self.__dict__["layout"] = layout
+        self.__dict__["_instance"] = instance  # the real preferences object for AddonPreferences
 
     def __getattr__(self, name):
         cls = self._cls
@@ -480,7 +505,16 @@ class _FakeSelf:
         except AttributeError:
             if name == "bl_idname":  # Blender derives it from the class name
                 return cls.__name__
+            inst = self.__dict__.get("_instance")
+            if inst is not None:
+                return getattr(inst, name)
             raise
+        inst = self.__dict__.get("_instance")
+        if inst is not None and not isinstance(raw, (types.FunctionType, staticmethod, classmethod)):
+            try:
+                return getattr(inst, name)  # a property: read the real stored value
+            except AttributeError:
+                pass
         if isinstance(raw, types.FunctionType):  # plain method: bind to the stand-in
             return types.MethodType(raw, self)
         return getattr(cls, name)  # staticmethod / classmethod / data attribute
@@ -489,29 +523,60 @@ class _FakeSelf:
         self.__dict__[k] = v
 
 
+def _real(data):
+    """Use the real preferences object when a draw function passes `self` of an AddonPreferences."""
+    inst = data.__dict__.get("_instance") if isinstance(data, _FakeSelf) else None
+    return inst if inst is not None else data
+
+
 _recording = []  # classes being drawn right now: a panel/popover/menu that reaches itself is skipped
 
 
-def record_class(cls, ctx, root_item, method="draw"):
+def record_class(cls, ctx, root_item, method="draw", instance=None):
     fn = getattr(cls, method, None)
     if fn is None or cls in _recording:
         return
     _recording.append(cls)
     try:
-        fn(_FakeSelf(cls, Rec(root_item, ctx)), ctx.context)
+        fn(_FakeSelf(cls, Rec(root_item, ctx), instance), ctx.context)
     finally:
         _recording.remove(cls)
 
 
 # -- scanning & committing ---------------------------------------------------------------------
+def _all_subclasses(base):
+    seen, queue = [], list(base.__subclasses__())
+    while queue:  # breadth first keeps definition order for classes that subclass the base directly
+        c = queue.pop(0)
+        if c not in seen:
+            seen.append(c)
+            queue.extend(c.__subclasses__())
+    return seen
+
+
+def _in_module(cls, module):
+    mod = getattr(cls, "__module__", "") or ""
+    return (mod == module or mod.startswith(module + ".")) and getattr(cls, "is_registered", False) \
+        and not getattr(cls, "uib_no_import", False)
+
+
 def addon_panels(module):
-    """Registered Panel classes defined by `module` (or its submodules)."""
-    out = []
-    for cls in bpy.types.Panel.__subclasses__():
-        mod = getattr(cls, "__module__", "") or ""
-        if (mod == module or mod.startswith(module + ".")) and getattr(cls, "is_registered", False) \
-                and not getattr(cls, "uib_no_import", False):
-            out.append(cls)
+    """Registered Panel classes defined by `module` (or its submodules), including subclasses of base panels."""
+    return [c for c in _all_subclasses(bpy.types.Panel) if _in_module(c, module)]
+
+
+KIND_ORDER = ("PANEL", "HEADER", "MENU", "DIALOG", "PREFS")
+KIND_PREFIX = {"PANEL": "", "HEADER": "Header: ", "MENU": "Menu: ", "DIALOG": "Dialog: ", "PREFS": "Preferences: "}
+
+
+def addon_ui(module):
+    """[(kind, class)] for everything an addon draws: panels, headers, menus, dialogs, preferences."""
+    out = [("PANEL", c) for c in addon_panels(module)]
+    out += [("HEADER", c) for c in _all_subclasses(bpy.types.Header) if _in_module(c, module)]
+    out += [("MENU", c) for c in _all_subclasses(bpy.types.Menu) if _in_module(c, module)]
+    out += [("DIALOG", c) for c in _all_subclasses(bpy.types.Operator)
+            if _in_module(c, module) and "draw" in c.__dict__]
+    out += [("PREFS", c) for c in _all_subclasses(bpy.types.AddonPreferences) if _in_module(c, module)]
     return out
 
 
@@ -627,13 +692,141 @@ def simplify(item):
     item.children = out
 
 
-def build_panel(cls, ctx):
-    """Item tree for one panel class. Returns (item, error_message or '')."""
+MAX_RECORDS = 60   # extra draws allowed per panel while exploring options
+MAX_OPTIONS = 12
+MAX_DEPTH = 3
+
+
+def _root_item(cls, kind):
     opts = getattr(cls, "bl_options", set())
-    item = Item("PANEL", getattr(cls, "bl_label", "") or cls.__name__,
-                default_closed="DEFAULT_CLOSED" in opts)
+    label = getattr(cls, "bl_label", "") or cls.__name__
+    if kind == "PREFS":
+        label = importer_addon_name(cls) or label
+    return Item("PANEL", KIND_PREFIX[kind] + label, default_closed="DEFAULT_CLOSED" in opts)
+
+
+def importer_addon_name(cls):
+    return addon_display_name((getattr(cls, "bl_idname", "") or cls.__module__).split(".")[0]
+                              if getattr(cls, "bl_idname", "") else cls.__module__)
+
+
+def _prefs_instance(cls):
+    try:
+        return bpy.context.preferences.addons[cls.bl_idname].preferences
+    except Exception:
+        return None
+
+
+def _record(cls, ctx, kind, overrides):
+    """Draw once, with the given (data, property, value) overrides applied temporarily."""
+    item = _root_item(cls, kind)
+    ctx.count = 0
+    saved = []
+    for data, prop, value in overrides:
+        try:
+            saved.append((data, prop, getattr(data, prop)))
+            setattr(data, prop, value)
+        except Exception:
+            pass
     error = ""
-    if hasattr(cls, "draw_header"):
+    try:
+        record_class(cls, ctx, item, instance=_prefs_instance(cls) if kind == "PREFS" else None)
+    except Exception as e:
+        error = "%s: %s" % (e.__class__.__name__, e)
+    finally:
+        for data, prop, old in reversed(saved):
+            try:
+                setattr(data, prop, old)
+            except Exception:
+                pass
+    return item, error
+
+
+def _sig(item):
+    return (item.type, item.label, repr(sorted(item.fields.items(), key=lambda kv: kv[0])),
+            tuple(_sig(c) for c in item.children))
+
+
+def _get(root, path):
+    node = root
+    for i in path:
+        if i >= len(node.children):
+            return None
+        node = node.children[i]
+    return node
+
+
+class _Explorer:
+    """Finds what each option of a Choice shows by switching the real property and drawing again."""
+
+    def __init__(self, cls, ctx, kind):
+        self.cls, self.ctx, self.kind = cls, ctx, kind
+        self.budget = MAX_RECORDS
+
+    def region(self, root, path, start, overrides, depth):
+        container = _get(root, path)
+        i = start
+        while container is not None and i < len(container.children):
+            it = container.children[i]
+            if it.type == "ENUM" and it.meta and depth < MAX_DEPTH and 2 <= len(it.meta["ids"]) <= MAX_OPTIONS:
+                self.choice(root, path, i, overrides, depth)
+            elif it.children:
+                self.region(root, path + [i], 0, overrides, depth)
+            i += 1
+
+    def choice(self, root, path, i, overrides, depth):
+        container = _get(root, path)
+        it = container.children[i]
+        meta = it.meta
+        if meta["cur"] not in meta["ids"]:
+            return
+        tails = {}
+        for rid in meta["ids"]:
+            if rid == meta["cur"]:
+                self.region(root, path, i + 1, overrides, depth + 1)
+                tails[rid] = list(container.children[i + 1:])
+                continue
+            if self.budget <= 0:
+                return
+            self.budget -= 1
+            ov = overrides + [(meta["data"], meta["prop"], rid)]
+            root_v, _ = _record(self.cls, self.ctx, self.kind, ov)
+            cont_v = _get(root_v, path)
+            same = (cont_v is not None and i < len(cont_v.children) and cont_v.children[i].meta
+                    and cont_v.children[i].meta["prop"] == meta["prop"])
+            if not same:
+                return
+            self.region(root_v, path, i + 1, ov, depth + 1)
+            tails[rid] = list(cont_v.children[i + 1:])
+        sigs = {rid: [_sig(x) for x in tail] for rid, tail in tails.items()}
+        first = sigs[meta["ids"][0]]
+        if all(s == first for s in sigs.values()):
+            return  # the option doesn't change what is drawn below it
+        shortest = min(len(s) for s in sigs.values())
+        k = 0  # trailing items drawn in every case stay as ordinary siblings
+        while k < shortest and all(s[-1 - k] == first[-1 - k] for s in sigs.values()):
+            k += 1
+        base_tail = tails[meta["cur"]]
+        shared = base_tail[len(base_tail) - k:] if k else []
+        options = []
+        for rid in meta["ids"]:
+            new_id, name = meta["map"][rid]
+            content = tails[rid][:len(tails[rid]) - k] if k else tails[rid]
+            opt = Item("OPTION", name, option_id=new_id)
+            opt.children = list(content)
+            options.append(opt)
+        it.children = options
+        container.children = container.children[:i + 1] + shared
+
+
+def build_panel(cls, ctx, kind="PANEL", explore=False):
+    """Item tree for one UI class. Returns (item, error_message or '').
+
+    With `explore`, every option of the Choices it draws is tried (temporarily switching the real
+    property) so conditional content ends up under the matching Option row.
+    """
+    item, error = _record(cls, ctx, kind, [])
+    if kind == "PANEL" and hasattr(cls, "draw_header"):
         try:
             head = Item("ROW")
             record_class(cls, ctx, head, "draw_header")
@@ -641,10 +834,11 @@ def build_panel(cls, ctx):
                 item.fields["header_checkbox"] = True
         except Exception:
             pass
-    try:
-        record_class(cls, ctx, item)
-    except Exception as e:
-        error = "%s: %s" % (e.__class__.__name__, e)
+    if explore and not error:
+        try:
+            _Explorer(cls, ctx, kind).region(item, [], 0, [], 0)
+        except Exception as e:  # exploration is best effort: keep the baseline drawing
+            error = ""
     simplify(item)
     return item, error
 

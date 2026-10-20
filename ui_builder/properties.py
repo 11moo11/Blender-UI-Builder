@@ -237,6 +237,11 @@ class UIB_Settings(bpy.types.PropertyGroup):
     import_mode: EnumProperty(name="Mode", default="REPLACE", items=[
         ("REPLACE", "Replace Project", "Clear the project first and copy the addon's name / location settings"),
         ("APPEND", "Append", "Add the imported panels after the existing elements")])
+    import_explore: BoolProperty(
+        name="Explore Tabs & Options", default=True,
+        description="Also capture what each option of a dropdown / tab shows, by temporarily switching the real "
+                    "setting and drawing again (the original value is restored). Turn off if switching a "
+                    "setting in that addon has side effects")
     import_skip: CollectionProperty(type=UIB_ImportPanel)  # panels the user un-ticked
 
 

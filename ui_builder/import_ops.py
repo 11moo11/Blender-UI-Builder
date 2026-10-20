@@ -40,15 +40,15 @@ def panel_id(cls):
 
 
 def listed_panels(s):
-    """(class, included) for every registered panel of the chosen addon."""
+    """(kind, class, included) for everything the chosen addon draws: panels, headers, menus, dialogs, prefs."""
     skipped = {p.idname for p in s.import_skip}
-    return [(c, panel_id(c) not in skipped) for c in importer.addon_panels(s.import_module)]
+    return [(kind, c, panel_id(c) not in skipped) for kind, c in importer.addon_ui(s.import_module)]
 
 
 class UIB_OT_import_addon(bpy.types.Operator):
-    """Copy the selected panels of the addon into the builder"""
+    """Copy the ticked UI (panels, headers, menus, dialogs, preferences) of the addon into the builder"""
     bl_idname = "ui_builder.import_addon"
-    bl_label = "Import Selected Panels"
+    bl_label = "Import Selected"
     bl_options = {"REGISTER", "UNDO"}
 
     @classmethod
@@ -58,51 +58,50 @@ class UIB_OT_import_addon(bpy.types.Operator):
     def execute(self, context):
         s = settings(context)
         module = s.import_module
-        classes = [c for c, included in listed_panels(s) if included]
-        if not classes:
-            self.report({"WARNING"}, "No panels selected")
+        chosen = [(kind, c) for kind, c, included in listed_panels(s) if included]
+        if not chosen:
+            self.report({"WARNING"}, "Nothing selected")
             return {"CANCELLED"}
 
         ctx = importer.Ctx(context)
         items, partial = {}, []
-        for cls in classes:
-            item, error = importer.build_panel(cls, ctx)
-            items[getattr(cls, "bl_idname", "") or cls.__name__] = item
+        for kind, cls in chosen:
+            item, error = importer.build_panel(cls, ctx, kind, explore=s.import_explore)
+            items[panel_id(cls)] = item
             if error:
                 partial.append("%s (%s)" % (item.label, error))
         roots = []
-        for cls in classes:
-            idname = getattr(cls, "bl_idname", "") or cls.__name__
-            parent = items.get(getattr(cls, "bl_parent_id", ""))
-            (parent.children if parent else roots).append(items[idname])
+        for kind, cls in chosen:
+            parent = items.get(getattr(cls, "bl_parent_id", "")) if kind == "PANEL" else None
+            (parent.children if parent else roots).append(items[panel_id(cls)])
 
+        placed = [c for kind, c in chosen if kind in ("PANEL", "HEADER") and getattr(c, "bl_space_type", "")]
         if s.import_mode == "REPLACE":
             s.elements.clear()
-            first = classes[0]
             mod = sys.modules.get(module)
             info = getattr(mod, "bl_info", None) or {}
             s.addon_name = importer.addon_display_name(module)
             if info.get("author"):
                 s.author = str(info["author"])
             s.prefix = el.slugify(module.split(".")[-1], "my_addon")
-            key = (getattr(first, "bl_space_type", ""), getattr(first, "bl_region_type", ""),
-                   getattr(first, "bl_context", "") or None)
-            for pid, spec in el.PLACEMENTS.items():
-                if spec[1:] == key:
-                    s.placement = pid
-                    break
-            if getattr(first, "bl_category", ""):
-                s.category = first.bl_category
+            first = placed[0] if placed else None
+            if first is not None:
+                key = (getattr(first, "bl_space_type", ""), getattr(first, "bl_region_type", ""),
+                       getattr(first, "bl_context", "") or None)
+                for pid, spec in el.PLACEMENTS.items():
+                    if spec[1:] == key:
+                        s.placement = pid
+                        break
+                if getattr(first, "bl_category", ""):
+                    s.category = first.bl_category
         project = el.project_place(s)
-        for cls in classes:
-            parent_in_addon = getattr(cls, "bl_parent_id", "") in items
-            if not parent_in_addon:
-                items[getattr(cls, "bl_idname", "") or cls.__name__].fields.update(
-                    importer.placement_fields(cls, project))
+        for kind, cls in chosen:
+            if kind in ("PANEL", "HEADER") and not (kind == "PANEL" and getattr(cls, "bl_parent_id", "") in items):
+                items[panel_id(cls)].fields.update(importer.placement_fields(cls, project))
         importer.commit(s, roots, new_element, tree.normalize)
         s.active_index = 0
         ensure_mock_items(context.scene)
-        self.report({"INFO"}, "Imported %d panel(s), %d element(s)" % (len(classes), len(s.elements)))
+        self.report({"INFO"}, "Imported %d item(s), %d element(s)" % (len(chosen), len(s.elements)))
         if partial:
             self.report({"WARNING"}, "Partly imported (draw code needs context that isn't "
                                      "available, e.g. a selected object): " + "; ".join(partial))

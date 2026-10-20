@@ -7,6 +7,11 @@ from . import icons, import_ops, locmap, preferences, updater
 from .properties import settings
 
 
+def importer_prefix(kind):
+    from .importer import KIND_PREFIX
+    return KIND_PREFIX[kind].replace(": ", " - ") if kind != "PANEL" else ""
+
+
 def _under_hidden(elems, index):
     """True if an ancestor of element `index` is hidden."""
     indent = elems[index].indent
@@ -426,13 +431,15 @@ class UIB_PT_import(bpy.types.Panel):
         layout.prop(s, "import_mode", text="")
         panels = import_ops.listed_panels(s) if s.import_module != "NONE" else []
         if panels:
+            layout.prop(s, "import_explore")
             box = layout.box()
             col = box.column(align=True)
-            for cls, included in panels:
+            for kind, cls, included in panels:
                 row = col.row(align=True)
-                if getattr(cls, "bl_parent_id", ""):
+                if kind == "PANEL" and getattr(cls, "bl_parent_id", ""):
                     row.label(text="", icon="BLANK1")
-                op = row.operator("ui_builder.toggle_import_panel", text=getattr(cls, "bl_label", "") or cls.__name__,
+                name = (getattr(cls, "bl_label", "") or cls.__name__)
+                op = row.operator("ui_builder.toggle_import_panel", text=importer_prefix(kind) + name,
                                   icon="CHECKBOX_HLT" if included else "CHECKBOX_DEHLT", emboss=False)
                 op.idname = import_ops.panel_id(cls)
             row = layout.row()

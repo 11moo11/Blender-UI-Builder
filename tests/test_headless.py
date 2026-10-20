@@ -94,7 +94,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 8, 0), updater.local_version()
+    assert updater.local_version() == (1, 9, 0), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -253,7 +253,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 8, 0), updater.local_version()
+    assert updater.local_version() == (1, 9, 0), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -359,10 +359,10 @@ def test_import():
             s.import_module = "fakeaddon"
             s.elements.clear()
             from ui_builder import import_ops
-            assert [(import_ops.panel_id(c), inc) for c, inc in import_ops.listed_panels(s)] == [
-                ("FAKE_PT_main", True), ("FAKE_PT_sub", True)]
+            got_ui = [(k, import_ops.panel_id(c), inc) for k, c, inc in import_ops.listed_panels(s)]
+            assert got_ui == [("PANEL", "FAKE_PT_main", True), ("PANEL", "FAKE_PT_sub", True)], got_ui
             bpy.ops.ui_builder.toggle_import_panel(idname="FAKE_PT_sub")
-            assert [inc for _, inc in import_ops.listed_panels(s)] == [True, False]
+            assert [inc for _, _, inc in import_ops.listed_panels(s)] == [True, False]
             bpy.ops.ui_builder.toggle_import_panel(idname="FAKE_PT_sub")
             ui.UIB_PT_import.draw(types.SimpleNamespace(layout=FakeLayout([])), bpy.context)
             bpy.ops.ui_builder.import_addon()
@@ -1100,7 +1100,130 @@ def test_visibility():
     print("visibility OK")
 
 
+def test_explore():
+    from ui_builder import importer, import_ops
+    from ui_builder.operators import new_element
+    from ui_builder.preview import Drawer
+    from bpy.props import BoolProperty, EnumProperty, FloatProperty, IntProperty, PointerProperty, StringProperty
+
+    class XP(bpy.types.PropertyGroup):
+        tab: EnumProperty(name="Tab", items=[("A", "Shapes", ""), ("B", "Materials", ""), ("C", "Empty", "")], default="A")
+        sub: EnumProperty(name="Sub", items=[("S1", "One", ""), ("S2", "Two", "")], default="S1")
+        a_value: FloatProperty(name="A Value")
+        b_value: IntProperty(name="B Value", default=4)
+        deep1: StringProperty(name="Deep One")
+        deep2: StringProperty(name="Deep Two")
+        footer: BoolProperty(name="Footer Flag")
+
+    class XBase(bpy.types.Panel):             # subclassed panels used to be missed entirely
+        bl_space_type = "VIEW_3D"; bl_region_type = "UI"; bl_category = "Explore"
+
+    class XTABS(XBase):
+        bl_label = "Tabs"; bl_idname = "XTABS"
+
+        def draw(self, context):
+            p = context.scene.x_props
+            lay = self.layout
+            lay.prop(p, "tab", expand=True)
+            if p.tab == "A":
+                lay.prop(p, "a_value")
+            elif p.tab == "B":
+                lay.prop(p, "b_value")
+                lay.prop(p, "sub", expand=True)
+                if p.sub == "S1":
+                    lay.prop(p, "deep1")
+                else:
+                    lay.prop(p, "deep2")
+            lay.prop(p, "footer")            # drawn for every tab
+
+    class XMENU(bpy.types.Menu):
+        bl_label = "Tools"; bl_idname = "XMENU"
+        def draw(self, context):
+            self.layout.operator("object.select_all", text="Select Everything")
+
+    class XHEADER(bpy.types.Header):
+        bl_space_type = "VIEW_3D"; bl_region_type = "HEADER"
+        def draw(self, context):
+            self.layout.operator("object.select_all", text="Header Button")
+
+    class XPREFS(bpy.types.AddonPreferences):
+        bl_idname = "xaddon"
+        token: StringProperty(name="Token", default="abc")
+        def draw(self, context):
+            self.layout.prop(self, "token")
+
+    class XDIALOG(bpy.types.Operator):
+        bl_idname = "x.dialog"; bl_label = "Ask"
+        amount: IntProperty(name="Amount", default=7)
+        def draw(self, context):
+            self.layout.prop(self, "amount")
+        def execute(self, context):
+            return {"FINISHED"}
+
+    classes = (XP, XTABS, XMENU, XHEADER, XPREFS, XDIALOG)
+    for c in classes:
+        bpy.utils.register_class(c)
+        c.__module__ = "xaddon"
+    bpy.types.Scene.x_props = PointerProperty(type=XP)
+    try:
+        kinds = sorted((k, c.__name__) for k, c in importer.addon_ui("xaddon"))
+        assert kinds == [("DIALOG", "XDIALOG"), ("HEADER", "XHEADER"), ("MENU", "XMENU"), ("PANEL", "XTABS"),
+                         ("PREFS", "XPREFS")], kinds
+        p = bpy.context.scene.x_props
+        p.tab, p.sub = "A", "S1"
+        item, err = importer.build_panel(XTABS, importer.Ctx(bpy.context), "PANEL", explore=True)
+        assert not err, err
+        assert (p.tab, p.sub) == ("A", "S1")                 # real settings are restored
+        shape = [(c.type, c.label) for c in item.children]
+        assert shape == [("ENUM", "Tab"), ("BOOL", "Footer Flag")], shape   # footer is shared, not duplicated
+        opts = item.children[0].children
+        assert [(o.label, o.fields["option_id"]) for o in opts] == [("Shapes", "shapes"), ("Materials", "materials"),
+                                                                    ("Empty", "empty")]
+        assert [c.label for c in opts[0].children] == ["A Value"]
+        assert [c.label for c in opts[1].children] == ["B Value", "Sub"]
+        sub = opts[1].children[1]
+        assert [(o.label, [c.label for c in o.children]) for o in sub.children] == [
+            ("One", ["Deep One"]), ("Two", ["Deep Two"])]      # nested tabs are explored too
+        assert opts[2].children == []
+        # same thing without exploring: only the visible branch
+        flat, _ = importer.build_panel(XTABS, importer.Ctx(bpy.context), "PANEL", explore=False)
+        assert [c.label for c in flat.children] == ["Tab", "A Value", "Footer Flag"]
+        # through the operator, then the mockup switches content when an option is chosen
+        real = importer.addon_modules
+        importer.addon_modules = lambda exclude=(): [("xaddon", "X Addon", 5)]
+        try:
+            s.import_module = "xaddon"; s.import_mode = "REPLACE"; s.elements.clear()
+            bpy.ops.ui_builder.import_addon()
+        finally:
+            importer.addon_modules = real
+        titles = [e.label for e in s.elements if e.type == "PANEL"]
+        assert titles == ["Tabs", "Header: XHEADER", "Menu: Tools", "Dialog: Ask", "Preferences: xaddon"] \
+            or titles[:4] == ["Tabs", "Header: XHEADER", "Menu: Tools", "Dialog: Ask"], titles
+        by_label = {e.label: e for e in s.elements}
+        assert by_label["Header: XHEADER"].panel_placement != "PROJECT"      # header strip, not the sidebar
+        assert by_label["Header: XHEADER"].p_region == "HEADER" or by_label["Header: XHEADER"].panel_placement == "CUSTOM"
+        enum = [e for e in s.elements if e.type == "ENUM" and e.label == "Tab"][0]
+        assert [e.label for e in s.elements if e.type == "OPTION"] == ["Shapes", "Materials", "One", "Two", "Empty"]
+
+        def drawn(v):
+            enum.enum_value = v
+            log = []
+            Drawer(s).nodes(FakeLayout(log), tree.build(s.elements))
+            return [kw.get("text") for m, a, kw in log if m == "prop"]
+        assert "A Value" in drawn("shapes") and "B Value" not in drawn("shapes")
+        assert "B Value" in drawn("materials") and "A Value" not in drawn("materials")
+        assert "Footer Flag" in drawn("empty")
+        assert "Token" in drawn("shapes") and "Amount" in drawn("shapes")     # prefs / dialog values scraped
+        compile(export.Exporter(s).python(), "<explore>", "exec")
+    finally:
+        del bpy.types.Scene.x_props
+        for c in reversed(classes):
+            bpy.utils.unregister_class(c)
+    print("explore OK")
+
+
 check_icons()
+test_explore()
 test_visibility()
 test_tooltips()
 test_separator()
