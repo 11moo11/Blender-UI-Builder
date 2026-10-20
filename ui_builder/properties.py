@@ -97,7 +97,11 @@ class UIB_Element(bpy.types.PropertyGroup):
     alignment: EnumProperty(name="Alignment", items=_ALIGNMENT, default="EXPAND",
                             description="Expand fills the width. Left / Center / Right pack the control at its "
                                         "natural size and align it (layout.alignment)")
-    align: BoolProperty(name="Align", description="Join the children without gaps", default=False)
+    align: BoolProperty(name="Connect Items",
+                        description="Join the buttons, fields and dropdowns inside edge to edge with no gaps and "
+                                    "joined corners (layout align=True). Has no effect on labels. Not the same "
+                                    "as Alignment, which positions the element left / center / right",
+                        default=False)
     prop_split: BoolProperty(name="Show Name on Left",
                              description="Form layout (use_property_split): the name is shown on the left and "
                                          "the value on the right, like the Properties editor. For a control "

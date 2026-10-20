@@ -228,7 +228,7 @@ def draw_element(layout, e):
         layout.prop(e, "default_closed")
         layout.prop(e, "header_checkbox")
     elif t in ("ROW", "COLUMN", "SPLIT", "GRID"):
-        layout.prop(e, "align")
+        layout.prop(e, "align", text="Connect Items (no gaps)")
         if t == "SPLIT":
             layout.prop(e, "split_factor")
         if t == "GRID":
