@@ -94,7 +94,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 7, 2), updater.local_version()
+    assert updater.local_version() == (1, 7, 3), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -253,7 +253,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 7, 2), updater.local_version()
+    assert updater.local_version() == (1, 7, 3), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -1024,7 +1024,36 @@ def test_self_import():
     print("self import OK")
 
 
+def test_separator():
+    from ui_builder import importer, ui
+    s.elements.clear()
+    bpy.ops.ui_builder.add(type="SEPARATOR")
+    e = s.elements[0]
+    assert e.separator_style == "LINE"                       # new separators are lines
+    assert [m for m, a, kw in _spec_calls(e)] == ["separator"] and _spec_calls(e)[0][2] == {"type": "LINE"}
+    e.separator_style = "SPACE"
+    assert _spec_calls(e)[0][2] == {}
+    ctxi = importer.Ctx(bpy.context)
+    root = importer.Item("PANEL", "P")
+    rec = importer.Rec(root, ctxi)
+    rec.separator(type="LINE"); rec.separator(); rec.separator(factor=2.0, type="SPACE"); rec.separator_spacer()
+    got = [(c.fields["separator_style"], c.fields.get("scale_y")) for c in root.children]
+    assert got == [("LINE", None), ("SPACE", None), ("SPACE", 2.0), ("SPACE", None)], got
+    log = []
+    ui.draw_element(FakeLayout(log), s.elements[0])
+    shown = [a[1] for m, a, kw in log if m == "prop" for a in [a]]
+    props = [a[1] for m, a, kw in log if m == "prop"]
+    assert "alert" not in props and "emboss" not in props and "spacer_factor" not in props, props
+    assert "separator_style" in props and "scale_y" in props and "enabled" in props, props
+    print("separator OK")
+
+
+def _spec_calls(e):
+    return [(sp.method, sp.args, sp.kwargs) for sp in el.leaf_specs(e)]
+
+
 check_icons()
+test_separator()
 test_self_import()
 test_enum_buttons()
 test_scrape()

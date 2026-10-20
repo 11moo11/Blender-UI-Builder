@@ -301,8 +301,8 @@ def leaf_specs(e, export=False):
         return specs
     if t == "SEPARATOR":
         skw = {}
-        if e.separator_style != "AUTO":
-            skw["type"] = e.separator_style
+        if e.separator_style == "LINE":  # a plain separator() already draws as a gap
+            skw["type"] = "LINE"
         if e.spacer_factor != 1.0:
             skw["factor"] = round(e.spacer_factor, 3)
         return [Spec("separator", [], skw)]

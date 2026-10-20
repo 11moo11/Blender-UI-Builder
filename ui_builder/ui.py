@@ -234,7 +234,7 @@ def draw_element(layout, e):
         if t == "GRID":
             layout.prop(e, "grid_columns")
             flags += [("grid_row_major", None), ("grid_even_columns", None), ("grid_even_rows", None)]
-    elif t in ("SEPARATOR", "SPACER"):
+    elif t == "SPACER":
         layout.prop(e, "spacer_factor")
     elif t == "BOOL":
         layout.prop(e, "bool_value", text="Default Value")
@@ -274,7 +274,9 @@ def draw_element(layout, e):
     box = layout.box()
     col = box.column(align=True)
     grid = col.grid_flow(row_major=True, even_columns=True, even_rows=True)
-    flags += [("enabled", None), ("alert", None)]
+    flags.append(("enabled", None))
+    if t not in ("SEPARATOR", "SPACER"):
+        flags.append(("alert", None))
     if t in el.SPLIT_TYPES:
         flags.append(("prop_split", "Show Name on Left"))
     elif d.container and t not in ("POPOVER", "OPTION"):
@@ -286,7 +288,8 @@ def draw_element(layout, e):
             grid.prop(e, prop)
     col.prop(e, "scale_x")
     col.prop(e, "scale_y")
-    col.prop(e, "emboss")
+    if t not in ("SEPARATOR", "SPACER"):
+        col.prop(e, "emboss")
     col.prop(e, "alignment")
 
     if t == "ENUM":

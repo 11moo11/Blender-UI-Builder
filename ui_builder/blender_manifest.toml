@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "ui_builder"
-version = "1.7.2"
+version = "1.7.3"
 name = "UI Builder"
 tagline = "Design add-on UI mockups and export them as code"
 maintainer = "11moo11"

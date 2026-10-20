@@ -325,8 +325,11 @@ class Rec:
             self._add(Item("LABEL", text, **f))
 
     def separator(self, factor=1.0, type="AUTO"):
-        style = type if type in ("AUTO", "SPACE", "LINE") else "AUTO"
-        self._add(Item("SEPARATOR", "", separator_style=style, spacer_factor=float(factor)))
+        # AUTO draws as a gap in panels, so it becomes Space; the size becomes Scale Y
+        fields = {"separator_style": "LINE" if type == "LINE" else "SPACE"}
+        if abs(float(factor) - 1.0) > 1e-6:
+            fields["scale_y"] = max(0.0, float(factor))
+        self._add(Item("SEPARATOR", "", **fields))
 
     def separator_spacer(self):
         self._add(Item("SEPARATOR", "", separator_style="SPACE"))

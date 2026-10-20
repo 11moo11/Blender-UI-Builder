@@ -133,9 +133,10 @@ class UIB_Element(bpy.types.PropertyGroup):
                                description="Comma separated option names. Each one gets its own row in the list",
                                default="Option A, Option B, Option C")
     use_alpha: BoolProperty(name="Alpha", description="Add an alpha channel (RGBA)", default=False)
-    separator_style: EnumProperty(name="Style", default="AUTO", items=[
-        ("AUTO", "Auto", ""), ("SPACE", "Space", ""), ("LINE", "Line", "")])
-    spacer_factor: FloatProperty(name="Size", default=1.0, min=0.0, soft_max=10.0)
+    # Numbers keep old files readable: an old "Auto" (0) is now Space, an old "Line" (2) is still Line.
+    separator_style: EnumProperty(name="Type", default="LINE", items=[
+        ("LINE", "Line", "", 2), ("SPACE", "Space", "", 0)])
+    spacer_factor: FloatProperty(name="Size", default=1.0, min=0.0, soft_max=10.0)  # legacy; use Scale Y
     id_type: EnumProperty(name="Data Type", items=_ID_TYPES, default="OBJECT")
     search_source: EnumProperty(name="Search In", default="objects",
                                 items=[(s, s.replace("_", " ").title(), "") for s in el.SEARCH_SOURCES])
