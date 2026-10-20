@@ -52,7 +52,7 @@ def _insert_position(s, type_id, nest):
         if p >= 0:
             return tree.block_end(elems, p), elems[p].indent
         return len(elems), 0
-    if active.type == "ENUM":  # a Choice's contents go under its options: add as a sibling instead
+    if active.type in el.BRANCHING:  # contents go under its option rows: add as a sibling instead
         return tree.block_end(elems, i), active.indent
     if el.DEFS[active.type].container:
         if active.fold:  # its contents are hidden, so "below" means after the whole folded block
@@ -276,9 +276,10 @@ class UIB_OT_indent(_ElementOp):
                 for a in tops:
                     b = tree.block_end(elems, a)
                     p = _prev_sibling(elems, a)
-                    if p is not None and elems[p].type == "ENUM":
+                    if p is not None and elems[p].type in el.BRANCHING:
                         options = branches._direct_children(elems, p, "OPTION")
                         if not options:
+                            self.report({"INFO"}, "Turn on 'Branch on State' for that checkbox first")
                             continue
                         target = tree.block_end(elems, options[0])  # end of the first option's contents
                         for k in range(b - a):
@@ -348,7 +349,7 @@ class UIB_OT_replace(_ElementOp):
                 old = el.DEFS[e.type]
                 if e.type == self.type or e.type == "OPTION":
                     continue
-                if e.type == "ENUM":  # leaving Choice: its Option rows dissolve, contents move up
+                if e.type in el.BRANCHING:  # leaving Choice / branching checkbox: Option rows dissolve
                     branches.strip_options(elems, i)
                     e = elems[i]  # the removals above may have invalidated the old reference
                 if not new.container:  # a leaf can't hold children: move them up one level

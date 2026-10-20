@@ -116,7 +116,7 @@ class Drawer:
             layout.active = False
         if e.type == "POPOVER":
             self.popover(layout, n)
-        elif d.container and e.type != "ENUM":
+        elif d.container and e.type not in el.BRANCHING:
             self.container(layout, n)
         else:
             target = layout
@@ -126,7 +126,7 @@ class Drawer:
                 _apply(target, attrs)
             for spec in el.leaf_specs(e):
                 self.call(target, e, spec)
-            if e.type == "ENUM":
+            if e.type in el.BRANCHING:
                 self.branches(layout, n)
             if e.description and e.type != "BUTTON" and self.settings.preview_tooltips:
                 col = layout.column(align=True)
@@ -137,7 +137,7 @@ class Drawer:
 
     def branches(self, layout, n):
         """Only the children of the currently selected option are drawn."""
-        chosen = n.elem.enum_value
+        chosen = n.elem.enum_value if n.elem.type == "ENUM" else ("on" if n.elem.bool_value else "off")
         for child in n.children:
             if child.elem.type != "OPTION":
                 self.node(layout, child)

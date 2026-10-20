@@ -234,6 +234,9 @@ class Exporter:
 
     def gen_branches(self, n, layout, ind, out):
         """`if props.choice == 'a': ...` blocks, one per option that has contents."""
+        if n.elem.type == "BOOL":
+            self.gen_bool_branches(n, layout, ind, out)
+            return
         first = True
         for child in n.children:
             if child.elem.type != "OPTION":
@@ -249,6 +252,28 @@ class Exporter:
             out += body
             first = False
 
+    def gen_bool_branches(self, n, layout, ind, out):
+        """`if props.flag:` / `else:` blocks for a checkbox's 'When checked / unchecked' rows."""
+        bodies = {}
+        for child in n.children:
+            if child.elem.type != "OPTION":
+                self.gen_children([child], layout, ind, out)
+                continue
+            body = []
+            self.gen_children(child.children, layout, ind + 1, body)
+            bodies[child.elem.option_id] = body
+        pad = "    " * ind
+        on, off = bodies.get("on"), bodies.get("off")
+        if on:
+            out.append("%sif props.%s:  # when checked" % (pad, n.name))
+            out += on
+            if off:
+                out.append("%selse:  # when unchecked" % pad)
+                out += off
+        elif off:
+            out.append("%sif not props.%s:  # when unchecked" % (pad, n.name))
+            out += off
+
     def gen_node(self, n, layout, ind, out):
         e = n.elem
         pad = "    " * ind
@@ -263,7 +288,7 @@ class Exporter:
             for spec in el.leaf_specs(e, export=True):
                 out.append(pad + self.call_line(target, n, spec))
             return
-        if not d.container or e.type == "ENUM":
+        if not d.container or e.type in el.BRANCHING:
             target = layout
             attrs = el.layout_attrs(e, False)
             if el.wrap_needed(e, attrs):
@@ -272,7 +297,7 @@ class Exporter:
                 out += ["%s%s.%s = %s" % (pad, target, k, _arg(v)) for k, v in attrs]
             for spec in el.leaf_specs(e, export=True):
                 out.append(pad + self.call_line(target, n, spec))
-            if e.type == "ENUM":
+            if e.type in el.BRANCHING:
                 self.gen_branches(n, layout, ind, out)
             return
         if e.type == "OPTION":  # stray row
@@ -500,6 +525,8 @@ class Exporter:
             e = n.elem
             d = el.DEFS[e.type]
             if e.type == "OPTION":
+                if n.parent is not None and n.parent.elem.type == "BOOL":
+                    return "%s%s" % (e.label, "" if n.children else " - nothing extra shown")
                 return "If \"%s\" is chosen (`%s`)%s" % (e.label, e.option_id,
                                                          "" if n.children else " - nothing extra shown")
             kind = "Sub-panel" if e.type == "PANEL" and n.parent else d.label

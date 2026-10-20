@@ -3,7 +3,7 @@
 import bpy
 
 from . import elements as el
-from . import icons, import_ops, locmap, preferences, updater
+from . import branches, icons, import_ops, locmap, preferences, updater
 from .properties import settings
 
 
@@ -41,7 +41,10 @@ class UIB_UL_elements(bpy.types.UIList):
         else:
             row.label(text="", icon="BLANK1")
         if item.type == "OPTION":  # label comes from the Choice's option list, so it is not editable here
-            row.label(text="If: %s" % item.label, icon=icons.valid_icon(item.icon) or "RIGHTARROW_THIN")
+            par = branches._parent_index(elems, index)
+            of_bool = par >= 0 and elems[par].type == "BOOL"
+            row.label(text=item.label if of_bool else "If: %s" % item.label,
+                      icon=icons.valid_icon(item.icon) or "RIGHTARROW_THIN")
             sub = row.row()
             sub.enabled = False
             sub.label(text="Option")
@@ -262,6 +265,7 @@ def draw_element(layout, e):
         layout.prop(e, "spacer_factor")
     elif t == "BOOL":
         layout.prop(e, "bool_value", text="Default Value")
+        flags.append(("use_branches", None))
     elif t in ("INT", "FLOAT", "SLIDER", "FACTOR", "PERCENT", "ANGLE", "DISTANCE", "STRING", "FILEPATH",
                "DIRPATH", "COLOR", "COLOR_ALPHA", "VEC2", "VEC3", "EULER", "SEARCH", "PROGRESS"):
         layout.prop(e, el.value_attr(e), text="Default Value")
@@ -316,6 +320,11 @@ def draw_element(layout, e):
         col.prop(e, "emboss")
     col.prop(e, "alignment")
 
+    if t == "BOOL" and e.use_branches:
+        info = layout.box()
+        info.label(text="Put controls under 'When checked' or", icon="INFO")
+        info.label(text="'When unchecked' to show them only")
+        info.label(text="in that state.")
     if t == "ENUM":
         info = layout.box()
         info.label(text="Each option has its own row in the list.", icon="INFO")

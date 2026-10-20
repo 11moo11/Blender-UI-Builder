@@ -180,7 +180,12 @@ def item_from_prop(data, name, text, icon, expand, slider, toggle, icon_only, in
             style = "TOGGLE" if toggle in (True, 1) else "CHECKBOX"
             if icon_only or (toggle in (True, 1) and text == "" and ic):
                 style = "ICON"
-            return done("BOOL", bool_style=style, bool_value=bool(dflt))
+            made = done("BOOL", bool_style=style, bool_value=bool(dflt))
+            if cur is not None:
+                made.meta = {"data": data, "prop": name, "cur": "on" if cur else "off",
+                             "ids": ["on", "off"], "values": {"on": True, "off": False},
+                             "map": {"on": ("on", "When checked"), "off": ("off", "When unchecked")}}
+            return made
         if t in ("INT", "FLOAT") and arr:
             sub = rna.subtype
             vec = tuple(float(x) for x in dflt) if dflt else None
@@ -768,7 +773,8 @@ class _Explorer:
         i = start
         while container is not None and i < len(container.children):
             it = container.children[i]
-            if it.type == "ENUM" and it.meta and depth < MAX_DEPTH and 2 <= len(it.meta["ids"]) <= MAX_OPTIONS:
+            if it.type in ("ENUM", "BOOL") and it.meta and depth < MAX_DEPTH \
+                    and 2 <= len(it.meta["ids"]) <= MAX_OPTIONS:
                 self.choice(root, path, i, overrides, depth)
             elif it.children:
                 self.region(root, path + [i], 0, overrides, depth)
@@ -789,7 +795,7 @@ class _Explorer:
             if self.budget <= 0:
                 return
             self.budget -= 1
-            ov = overrides + [(meta["data"], meta["prop"], rid)]
+            ov = overrides + [(meta["data"], meta["prop"], meta.get("values", {}).get(rid, rid))]
             root_v, _ = _record(self.cls, self.ctx, self.kind, ov)
             cont_v = _get(root_v, path)
             same = (cont_v is not None and i < len(cont_v.children) and cont_v.children[i].meta
@@ -816,6 +822,8 @@ class _Explorer:
             opt.children = list(content)
             options.append(opt)
         it.children = options
+        if it.type == "BOOL":
+            it.fields["use_branches"] = True
         container.children = container.children[:i + 1] + shared
 
 

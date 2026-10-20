@@ -57,7 +57,7 @@ _DEFS = (
     Def("TEXT_LINES", "Text Block", "TEXT", "ALIGN_LEFT", ident=False, icon_ok=False,
         help="Several labels in a column. Separate lines with '|'."),
     # --- Properties -------------------------------------------------------
-    Def("BOOL", "Checkbox", "PROPS", "CHECKBOX_HLT", desc=True, help="Boolean property."),
+    Def("BOOL", "Checkbox", "PROPS", "CHECKBOX_HLT", container=True, desc=True, help="Boolean property."),
     Def("INT", "Integer", "PROPS", "MOD_ARRAY", desc=True, help="Integer field."),
     Def("FLOAT", "Float", "PROPS", "IPO_LINEAR", desc=True, help="Float field."),
     Def("SLIDER", "Slider", "PROPS", "IPO_EASE_IN_OUT", desc=True, help="Float shown as a slider (0-1 by default)."),
@@ -126,8 +126,9 @@ TIPS = {
              "Exports layout.label().",
     "TEXT_LINES": "Several lines of text in one element: separate the lines with | in the name. Display only. "
                   "Exports one label per line.",
-    "BOOL": "A checkbox, toggle button or icon toggle that stores on/off. Exports a BoolProperty drawn with "
-            "layout.prop().",
+    "BOOL": "A checkbox, toggle button or icon toggle that stores on/off. Tick 'Branch on State' to give it "
+            "'When checked' / 'When unchecked' rows holding controls that appear only in that state. Exports a "
+            "BoolProperty drawn with layout.prop().",
     "INT": "A whole-number field the user can type in or drag. The range can be limited. Exports an "
            "IntProperty.",
     "FLOAT": "A decimal-number field the user can type in or drag. The range can be limited. Exports a "
@@ -435,9 +436,12 @@ def leaf_specs(e, export=False):
     raise KeyError(t)
 
 
+BRANCHING = ("ENUM", "BOOL")  # elements whose children live under Option rows (one per value / state)
+
+
 def can_nest(type_id):
     """Whether new children may be put straight inside this element type."""
-    return DEFS[type_id].container and type_id != "ENUM"  # a Choice's children live under its options
+    return DEFS[type_id].container and type_id not in BRANCHING
 
 
 def value_attr(e):

@@ -94,7 +94,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 9, 0), updater.local_version()
+    assert updater.local_version() == (1, 10, 0), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -253,7 +253,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 9, 0), updater.local_version()
+    assert updater.local_version() == (1, 10, 0), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -1222,7 +1222,113 @@ def test_explore():
     print("explore OK")
 
 
+def test_bool_branches():
+    from ui_builder import importer
+    from ui_builder.operators import new_element
+    from ui_builder.preview import Drawer
+    from bpy.props import BoolProperty, FloatProperty, PointerProperty
+
+    s.elements.clear()
+    bpy.ops.ui_builder.add(type="PANEL")
+    bpy.ops.ui_builder.add(type="BOOL")
+    s.elements[1].label = "Use Extra"
+    assert [e.type for e in s.elements] == ["PANEL", "BOOL"]          # no rows until you ask for them
+    s.elements[1].use_branches = True
+    assert [(e.type, e.label) for e in s.elements][2:] == [("OPTION", "When checked"), ("OPTION", "When unchecked")]
+    s.active_index = 2
+    bpy.ops.ui_builder.add(type="LABEL"); s.elements[3].label = "extra on"
+    s.active_index = 4
+    bpy.ops.ui_builder.add(type="LABEL"); s.elements[5].label = "extra off"
+    assert [(e.label, e.indent) for e in s.elements][1:] == [
+        ("Use Extra", 1), ("When checked", 2), ("extra on", 3), ("When unchecked", 2), ("extra off", 3)]
+
+    def texts(value):
+        s.elements[1].bool_value = value
+        log = []
+        Drawer(s).nodes(FakeLayout(log), tree.build(s.elements))
+        return [kw.get("text") for m, a, kw in log if m == "label"]
+    assert "extra on" in texts(True) and "extra off" not in texts(True)
+    assert "extra off" in texts(False) and "extra on" not in texts(False)
+    ex = export.Exporter(s)
+    code = ex.python()
+    assert "if props.use_extra:" in code and "else:" in code, code
+    assert "When checked" in ex.llm()
+    ns = {"__name__": "gen_bool"}
+    exec(compile(code, "<bool>", "exec"), ns)
+    ns["register"]()
+    try:
+        props = getattr(scene, ex.group)
+        panel = [c for c in ns["classes"] if issubclass(c, bpy.types.Panel)][0]
+        for value, want in ((True, "extra on"), (False, "extra off")):
+            props.use_extra = value
+            log = []
+            panel.draw(types.SimpleNamespace(layout=FakeLayout(log)), bpy.context)
+            got = [kw.get("text") for m, a, kw in log if m == "label"]
+            assert want in got and ("extra off" if value else "extra on") not in got, (value, got)
+    finally:
+        ns["unregister"]()
+    # rows are kept in sync when the toggle is switched off: contents move up
+    s.elements[1].use_branches = False
+    assert [(e.type, e.indent) for e in s.elements][1:] == [("BOOL", 1), ("LABEL", 2), ("LABEL", 2)]
+    # nesting into a checkbox: needs branching first, then goes into 'When checked'
+    s.elements.clear()
+    for typ, label, ind in [("PANEL", "P", 0), ("BOOL", "Flag", 1), ("LABEL", "x", 1)]:
+        new_element(s, typ, len(s.elements), ind, label)
+    s.active_index = 2
+    assert bpy.ops.ui_builder.indent(direction="IN") == {"CANCELLED"}
+    s.elements[1].use_branches = True
+    s.active_index = [i for i, e in enumerate(s.elements) if e.label == "x"][0]
+    bpy.ops.ui_builder.indent(direction="IN")
+    assert [(e.label, e.indent) for e in s.elements] == [("P", 0), ("Flag", 1), ("When checked", 2), ("x", 3),
+                                                         ("When unchecked", 2)], [(e.label, e.indent) for e in s.elements]
+
+    # importing: a checkbox that reveals controls is explored
+    class BP(bpy.types.PropertyGroup):
+        use_extra: BoolProperty(name="Use Extra", default=False)
+        quiet: BoolProperty(name="Quiet", default=True)
+        amount: FloatProperty(name="Amount")
+        other: FloatProperty(name="Other")
+
+    class BOOL_PT_main(bpy.types.Panel):
+        bl_label = "Flags"; bl_idname = "BOOL_PT_main"
+        bl_space_type = "VIEW_3D"; bl_region_type = "UI"; bl_category = "Flags"
+
+        def draw(self, context):
+            p = context.scene.bp_props
+            self.layout.prop(p, "use_extra")
+            if p.use_extra:
+                self.layout.prop(p, "amount")
+            self.layout.prop(p, "quiet")      # changes nothing below it
+            self.layout.prop(p, "other")
+
+    for c in (BP, BOOL_PT_main):
+        bpy.utils.register_class(c)
+        c.__module__ = "booladdon"
+    bpy.types.Scene.bp_props = PointerProperty(type=BP)
+    try:
+        p = bpy.context.scene.bp_props
+        item, err = importer.build_panel(BOOL_PT_main, importer.Ctx(bpy.context), "PANEL", explore=True)
+        assert not err and p.use_extra is False and p.quiet is True            # real values restored
+        kids = [(c.type, c.label) for c in item.children]
+        assert kids == [("BOOL", "Use Extra"), ("BOOL", "Quiet"), ("FLOAT", "Other")], kids
+        flag = item.children[0]
+        assert flag.fields["use_branches"] is True
+        assert [(o.label, [c.label for c in o.children]) for o in flag.children] == [
+            ("When checked", ["Amount"]), ("When unchecked", [])]
+        assert not item.children[1].children                                   # "Quiet" has no branches
+        s.elements.clear()
+        importer.commit(s, [item], new_element, tree.normalize)
+        assert [e.label for e in s.elements if e.type == "OPTION"] == ["When checked", "When unchecked"]
+        compile(export.Exporter(s).python(), "<boolimport>", "exec")
+    finally:
+        del bpy.types.Scene.bp_props
+        for c in (BOOL_PT_main, BP):
+            bpy.utils.unregister_class(c)
+    print("bool branches OK")
+
+
 check_icons()
+test_bool_branches()
 test_explore()
 test_visibility()
 test_tooltips()

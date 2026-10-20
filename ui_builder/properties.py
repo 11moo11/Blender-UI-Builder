@@ -35,6 +35,11 @@ def _on_enum_items(self, context):
     branches.sync_for(self, context)
 
 
+def _on_use_branches(self, context):
+    from . import branches
+    branches.sync_for(self, context)
+
+
 def _on_label(self, context):
     if self.auto_ident:
         self.ident = el.slugify(self.label, el.slugify(self.type))
@@ -122,6 +127,9 @@ class UIB_Element(bpy.types.PropertyGroup):
                                   description="Add an enable checkbox to the panel header", default=False)
 
     # Leaf options
+    use_branches: BoolProperty(name="Branch on State", update=_on_use_branches, default=False,
+                               description="Give the checkbox 'When checked' / 'When unchecked' rows; controls "
+                                           "placed under a row are shown only in that state")
     bool_style: EnumProperty(name="Style", default="CHECKBOX", items=[
         ("CHECKBOX", "Checkbox", ""), ("TOGGLE", "Toggle Button", ""), ("ICON", "Icon Toggle", "Needs an icon")])
     enum_style: EnumProperty(name="Type", default="DROPDOWN", items=[

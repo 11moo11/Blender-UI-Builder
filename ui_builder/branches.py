@@ -10,6 +10,7 @@ from . import elements as el
 from . import tree
 
 _suspended = 0
+BOOL_OPTIONS = (("on", "When checked"), ("off", "When unchecked"))
 
 
 @contextlib.contextmanager
@@ -47,7 +48,7 @@ def _remove_stray_options(elems):
     while i < len(elems):
         if elems[i].type == "OPTION":
             p = _parent_index(elems, i)
-            if p < 0 or elems[p].type != "ENUM":
+            if p < 0 or elems[p].type not in el.BRANCHING:
                 end = tree.block_end(elems, i)
                 for k in range(i + 1, end):
                     elems[k].indent -= 1
@@ -68,10 +69,16 @@ def strip_options(elems, i):
 def sync_options(s, i):
     from .operators import new_element  # late import: operators imports this module
     elems = s.elements
-    if not (0 <= i < len(elems)) or elems[i].type != "ENUM":
+    if not (0 <= i < len(elems)) or elems[i].type not in el.BRANCHING:
         return
     ind = elems[i].indent + 1
-    desired = el.parse_enum_items(elems[i].enum_items)
+    if elems[i].type == "BOOL":
+        if not elems[i].use_branches:
+            strip_options(elems, i)
+            return
+        desired = list(BOOL_OPTIONS)
+    else:
+        desired = el.parse_enum_items(elems[i].enum_items)
     kids = _direct_children(elems, i, "OPTION")
 
     # 1. match existing rows to options: by identifier first, then the leftovers by position (renames)
@@ -153,14 +160,14 @@ def sync_all(s):
         _remove_stray_options(s.elements)
     i = 0
     while i < len(s.elements):
-        if s.elements[i].type == "ENUM":
+        if s.elements[i].type in el.BRANCHING:
             sync_options(s, i)
         i += 1
 
 
 def sync_for(element, context):
     """Update callback of Choice.enum_items."""
-    if _suspended or element.type != "ENUM":
+    if _suspended or element.type not in el.BRANCHING:
         return
     s = context.scene.ui_builder
     for i, e in enumerate(s.elements):
