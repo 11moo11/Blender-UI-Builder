@@ -94,7 +94,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 11, 0), updater.local_version()
+    assert updater.local_version() == (1, 11, 1), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -253,7 +253,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 11, 0), updater.local_version()
+    assert updater.local_version() == (1, 11, 1), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -1490,7 +1490,100 @@ def test_hidden_state():
     print("hidden state OK")
 
 
+def test_hidden_state_formatting():
+    from ui_builder import importer
+    from ui_builder.operators import new_element
+    from ui_builder.preview import Drawer
+    from bpy.props import BoolProperty, BoolVectorProperty, EnumProperty, FloatProperty, PointerProperty
+
+    class HG(bpy.types.PropertyGroup):
+        open_: BoolProperty(name="Window Open", default=False)
+        clip: FloatProperty(name="Clip Start", default=4.2)
+        pin: BoolProperty(name="Pin")
+        link: BoolProperty(name="Link")
+        tab: EnumProperty(name="Mode", items=[("A", "Viewport", ""), ("B", "Custom", "")])
+        axes: BoolVectorProperty(name="Axes", size=3, subtype="XYZ", default=(True, False, True))
+        extra1: FloatProperty(name="Refresh")
+        extra2: FloatProperty(name="Quality")
+
+    class HOLO_PT_main(bpy.types.Panel):
+        bl_label = "View"; bl_idname = "HOLO_PT_main"
+        bl_space_type = "VIEW_3D"; bl_region_type = "UI"; bl_category = "Holo"
+
+        def draw(self, context):
+            g = context.window_manager.hg
+            lay = self.layout
+            row = lay.row(align=True)
+            row.prop(g, "clip")
+            sub = row.row(); sub.enabled = not g.open_                 # attribute-only change with the flag
+            sub.prop(g, "pin", text="", icon="PINNED", toggle=True)    # an icon toggle that ends the row
+            lay.prop(g, "axes")                                         # three toggles
+            lay.operator("object.select_all", text="Cast")
+            if g.open_:
+                lay.prop(g, "extra1")
+                lay.prop(g, "tab", expand=True)
+            lay.label(text="Middle")
+            if g.open_:
+                lay.prop(g, "extra2")
+            lay.prop(g, "link", text="", icon="LINKED", toggle=True)
+
+    for c in (HG, HOLO_PT_main):
+        bpy.utils.register_class(c)
+        c.__module__ = "holoaddon"
+    bpy.types.WindowManager.hg = PointerProperty(type=HG)
+    try:
+        item, err = importer.build_panel(HOLO_PT_main, importer.Ctx(bpy.context), "PANEL", explore=True,
+                                         hidden=True, module="holoaddon")
+        assert not err, err
+
+        def show(i, d=0):
+            return [(d, i.type, i.label)] + [x for c in i.children for x in show(c, d + 1)]
+        flat = show(item)
+        # the row keeps its field + pin together, in both states, and the pin is still a toggle in that row
+        rows = [x for x in item.children if x.type == "ROW"]
+        assert rows and [c.type for c in rows[0].children] == ["FLOAT", "BOOL"], flat
+        # axes: a row of three toggles, not an '(boolean)' label
+        axes = [x for x in item.children if x.type == "ROW" and x.children and x.children[0].label == "X"]
+        assert axes and [c.label for c in axes[0].children] == ["X", "Y", "Z"], flat
+        assert not any("(boolean)" in x[2] for x in flat)
+        # two separate reveals => two Hidden State elements sharing one identifier; value-only changes ignored
+        states = [x for x in item.children if x.type == "BOOL" and x.fields.get("bool_style") == "STATE"]
+        assert len(states) == 2 and {s_.fields["ident"] for s_ in states} == {"open"}, flat
+        assert [c.label for c in states[0].children[0].children] == ["Refresh", "Mode"]
+        assert [c.label for c in states[1].children[0].children] == ["Quality"]
+        assert item.children[-1].type == "BOOL" and item.children[-1].fields.get("bool_style") != "STATE"
+        s.elements.clear()
+        importer.commit(s, [item], new_element, tree.normalize)
+        names = [e.label for e in s.elements if e.type == "BOOL" and e.bool_style == "STATE"]
+        assert names == ["Window Open", "Window Open"]
+        d = Drawer(s)
+        assert d.states == {"open": [i for i, e in enumerate(s.elements) if e.bool_style == "STATE"][0]}
+
+        def draw():
+            log = []
+            Drawer(s).nodes(FakeLayout(log), tree.build(s.elements))
+            return log
+        bars = lambda log: [kw.get("text") for m, a, kw in log if m == "prop" and "State:" in (kw.get("text") or "")]
+        log = draw()
+        assert len(bars(log)) == 1 and "(off)" in bars(log)[0]                 # one switch for the whole state
+        assert "Refresh" not in [kw.get("text") for m, a, kw in log if m == "prop"]
+        bpy.ops.ui_builder.mock_action(index=d.states["open"])
+        log = draw()
+        texts = [kw.get("text") for m, a, kw in log if m == "prop"]
+        assert "Refresh" in texts and "Quality" in texts and len(bars(log)) == 1 and "(on)" in bars(log)[0]
+        # export: one property for the state, two if-blocks
+        code = export.Exporter(s).python()
+        assert code.count("    open: BoolProperty(") == 1 and code.count("if props.open:") == 2, code
+        compile(code, "<holo>", "exec")
+    finally:
+        del bpy.types.WindowManager.hg
+        for c in (HOLO_PT_main, HG):
+            bpy.utils.unregister_class(c)
+    print("hidden state formatting OK")
+
+
 check_icons()
+test_hidden_state_formatting()
 test_hidden_state()
 test_tabs_in_row()
 test_bool_branches()

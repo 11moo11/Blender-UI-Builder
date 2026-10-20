@@ -57,8 +57,11 @@ class Drawer:
     def __init__(self, settings):
         self.settings = settings
         # hidden states a Button can flip, by identifier
-        self.states = {e.ident: i for i, e in enumerate(settings.elements)
-                       if e.type == "BOOL" and e.bool_style == "STATE"}
+        self.states = {}
+        for i, e in enumerate(settings.elements):  # several elements may share one state: the first one rules
+            if e.type == "BOOL" and e.bool_style == "STATE":
+                self.states.setdefault(e.ident, i)
+        self._state_bar_shown = set()
 
     # -- argument resolution -------------------------------------------------
     def _args(self, e, spec):
@@ -132,10 +135,13 @@ class Drawer:
         if e.type == "POPOVER":
             self.popover(layout, n)
         elif e.type == "BOOL" and e.bool_style == "STATE":
-            row = layout.row()
-            row.active = False  # a note for the designer, not part of the real UI
-            row.prop(e, "bool_value", toggle=True, icon="PREFERENCES",
-                     text="State: %s (%s)" % (e.label or e.ident, "on" if e.bool_value else "off"))
+            main = self.settings.elements[self.states.get(e.ident, n.index)]
+            if e.ident not in self._state_bar_shown:  # one switch per state, however many places it controls
+                self._state_bar_shown.add(e.ident)
+                row = layout.row()
+                row.active = False  # a note for the designer, not part of the real UI
+                row.prop(main, "bool_value", toggle=True, icon="PREFERENCES",
+                         text="State: %s (%s)" % (main.label or main.ident, "on" if main.bool_value else "off"))
             self.branches(layout, n)
         elif d.container and e.type not in el.BRANCHING:
             self.container(layout, n)
@@ -158,7 +164,14 @@ class Drawer:
 
     def branches(self, layout, n):
         """Only the children of the currently selected option are drawn."""
-        chosen = n.elem.enum_value if n.elem.type == "ENUM" else ("on" if n.elem.bool_value else "off")
+        e = n.elem
+        if e.type == "ENUM":
+            chosen = e.enum_value
+        else:
+            value = e.bool_value
+            if e.bool_style == "STATE" and e.ident in self.states:
+                value = self.settings.elements[self.states[e.ident]].bool_value
+            chosen = "on" if value else "off"
         for child in n.children:
             if child.elem.type != "OPTION":
                 self.node(layout, child)

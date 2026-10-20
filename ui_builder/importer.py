@@ -6,6 +6,7 @@ tooltips, enum options and current values are read from Blender's RNA, so the re
 mirrors what the addon really shows.
 """
 
+import difflib
 import inspect
 import types
 
@@ -176,6 +177,15 @@ def item_from_prop(data, name, text, icon, expand, slider, toggle, icon_only, in
         return Item(type_id, label, **f)
 
     try:
+        if t == "BOOLEAN" and arr:
+            names = ("X", "Y", "Z", "W") if rna.subtype in ("XYZ", "XYZ_LENGTH", "TRANSLATION") else ()
+            row = Item("ROW", align=True)
+            for k in range(rna.array_length):
+                nm = names[k] if k < len(names) else str(k + 1)
+                row.children.append(Item("BOOL", nm, ident="%s_%s" % (ident, nm.lower()), bool_style="TOGGLE",
+                                         description=f["description"],
+                                         bool_value=bool(dflt[k]) if dflt else False))
+            return row
         if t == "BOOLEAN" and not arr:
             style = "TOGGLE" if toggle in (True, 1) else "CHECKBOX"
             if icon_only or (toggle in (True, 1) and text == "" and ic):
@@ -335,8 +345,9 @@ class Rec:
 
     def panel(self, idname, default_closed=False):
         header = Rec(Item("ROW"), self._ctx)  # header contents are discarded
-        body = self._child("COLLAPSE", idname.replace("_", " ").title(), ident=idname,
-                           expanded=not default_closed)
+        cls = getattr(bpy.types, idname, None)
+        title = getattr(cls, "bl_label", "") or _pretty(idname.split("_PT_")[-1])
+        body = self._child("COLLAPSE", title, ident=idname, expanded=not default_closed)
         return header, body
 
     def panel_prop(self, data, prop, **kw):
@@ -735,7 +746,8 @@ def _hoist_choices(root):
             c = node.children[i]
             walk(c)
             if c.type in ("ROW", "COLUMN") and c.children and c.children[-1].type in ("ENUM", "BOOL") \
-                    and c.children[-1].meta:
+                    and c.children[-1].meta \
+                    and all(x.type in ("LABEL", "SEPARATOR", "TEXT_LINES") for x in c.children[:-1]):
                 moved = c.children.pop()
                 if c.type == "ROW" and moved.type == "ENUM" and moved.fields.get("enum_style") == "EXPAND":
                     moved.fields["enum_style"] = "ROW"  # it was laid out side by side by that row
@@ -912,25 +924,32 @@ def _state_candidates(module, drawn):
     return out
 
 
-def _diff(b, v, path=()):
-    """Where two drawings differ: (path of the container, index, base items, variant items)."""
+_VERTICAL = ("PANEL", "COLUMN", "BOX", "COLLAPSE", "OPTION")
+
+
+def _hunks(b, v, path=()):
+    """Every place where two drawings really differ, as (container path, index, base items, variant items).
+
+    Differences that only change a value or a modifier of the same element are ignored; only content that
+    appears or disappears counts. Containers laid out side by side (rows, grids) are never opened up, so a
+    hidden state can't tear a row apart."""
+    out = []
     bs, vs = [_sig(c) for c in b.children], [_sig(c) for c in v.children]
-    if bs == vs:
-        return None
-    low = min(len(bs), len(vs))
-    p = 0
-    while p < low and bs[p] == vs[p]:
-        p += 1
-    s = 0
-    while s < low - p and bs[-1 - s] == vs[-1 - s]:
-        s += 1
-    nb, nv = len(bs) - p - s, len(vs) - p - s
-    if nb == 1 and nv == 1 and b.children[p].type == v.children[p].type and b.children[p].children \
-            and v.children[p].children and b.children[p].type in ("ROW", "COLUMN", "BOX", "SPLIT", "GRID", "COLLAPSE"):
-        inner = _diff(b.children[p], v.children[p], path + (p,))
-        if inner:
-            return inner
-    return (list(path), p, b.children[p:len(bs) - s], v.children[p:len(vs) - s])
+    matcher = difflib.SequenceMatcher(None, bs, vs, autojunk=False)
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            continue
+        base_items, var_items = b.children[i1:i2], v.children[j1:j2]
+        if tag == "replace" and len(base_items) == len(var_items):
+            for k, (x, y) in enumerate(zip(base_items, var_items)):
+                if x.type == y.type and x.label == y.label:
+                    if x.type in _VERTICAL:
+                        out += _hunks(x, y, path + (i1 + k,))
+                    continue  # same element with a different value / modifier: not a reveal
+                out.append((list(path), i1 + k, [x], [y]))
+            continue
+        out.append((list(path), i1, base_items, var_items))
+    return out
 
 
 def _preorder(item, out):
@@ -973,11 +992,8 @@ def _hidden_states(cls, ctx, kind, module, item):
         if err:
             continue
         simplify(var)
-        found = _diff(item, var)
-        if found:
-            path, p, base_items, var_items = found
-            ops.append((path, p, base_items, var_items, prop, label,
-                        _button_before(item, path, p)))
+        for path, p, base_items, var_items in _hunks(item, var):
+            ops.append((path, p, base_items, var_items, prop, label, _button_before(item, path, p)))
     applied = {}
     for path, p, base_items, var_items, prop, label, button in sorted(ops, key=lambda o: (o[0], o[1]), reverse=True):
         key = tuple(path)

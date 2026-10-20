@@ -69,6 +69,10 @@ class Exporter:
                 k += 1
             used.add(name)
             n.name = name
+        first = {}
+        for n in self.nodes:  # states with the same identifier are one property
+            if n.elem.type == "BOOL" and n.elem.bool_style == "STATE":
+                n.name = first.setdefault(n.elem.ident, n.name)
 
     def cls(self, kind, n):
         return "%s_%s_%s" % (self.PFX, kind, n.name)
@@ -401,7 +405,12 @@ class Exporter:
 
     def all_property_lines(self):
         lines = []
+        emitted = set()
         for n in self.nodes:
+            if n.elem.type == "BOOL" and n.elem.bool_style == "STATE":
+                if n.name in emitted:
+                    continue
+                emitted.add(n.name)
             decl, _ = self.property_defs(n)
             if decl:
                 lines += decl
