@@ -45,6 +45,12 @@ A Choice can be a **Dropdown**, **Buttons (stacked)** (one above the other, like
 
 Tick **Branch on State** on a Checkbox and it gets **When checked** / **When unchecked** rows, the same way a Choice has one row per option. Controls under *When checked* appear in the mockup only while the checkbox is on (click it to see them), and export as `if props.flag:` / `else:`. Nest an existing element in with **Nest In (→)** once branching is on; turning the toggle off dissolves the rows and moves their contents up. The importer explores checkboxes too: it flips each one, draws again, and turns anything that appears or disappears into a branch (checkboxes that change nothing stay plain).
 
+#### Buttons that reveal controls (hidden state)
+
+Some UIs show extra controls *after an action*: a "Cast" button opens a window and the cast settings appear. The mockup can't run operators, so use a **Hidden State**: add a Checkbox and set its Type to *Hidden State*. It draws nothing in the real UI (in the mockup it shows as a small greyed "State: … (on/off)" switch) and has *When checked* / *When unchecked* rows like any branching checkbox. Select a **Button** and set **Toggles State** to it: clicking that button in the mockup now flips the state, so its contents appear and disappear. The export gets a `BoolProperty`, the `if props.state:` blocks, and the button's operator stub flips the property as a starting point.
+
+**Explore Hidden State** (Import From Addon, off by default) finds these automatically: it flips the addon's internal on/off flags (the ones no widget shows) one at a time, draws again, and turns whatever appears or disappears into a Hidden State at that spot, with the Button drawn just above it linked to it. Flags are restored afterwards, but flipping runs their update callbacks, so leave it off if that could start something (a render, a window). It only sees flags stored in the addon's own property groups, not module-level Python variables or the state of Blender windows.
+
 ### Where it lives
 
 Not everything is in a sidebar panel: a panel can sit in a header dropdown, the Image Editor or the Properties editor, and some things (a viewport overlay, a gizmo, a header button) aren't drawn by a panel at all. The **Where It Lives** panel shows this:

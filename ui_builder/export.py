@@ -44,6 +44,8 @@ class Exporter:
         self.roots = tree.build(settings.elements)
         self.nodes = list(tree.walk(self.roots))
         self._assign_names()
+        self.state_names = {n.elem.ident: n.name for n in self.nodes
+                            if n.elem.type == "BOOL" and n.elem.bool_style == "STATE"}
         self.place = el.project_place(settings)
         self.region = self.place.region
         self.has_list = any(n.elem.type == "LIST" for n in self.nodes)
@@ -379,12 +381,13 @@ class Exporter:
         for n in self.nodes:
             e = n.elem
             if e.type == "BUTTON":
-                self.operators.append((n.name, self.cls("OT", n), e.label, e.description))
+                self.operators.append((n.name, self.cls("OT", n), e.label, e.description,
+                                       self.state_names.get(e.toggle_target)))
             elif e.type == "MENU":
                 items = []
                 for ident, label in el.parse_enum_items(e.enum_items):
                     opname = "%s_%s" % (n.name, ident)
-                    self.operators.append((opname, "%s_OT_%s" % (self.PFX, opname), label, ""))
+                    self.operators.append((opname, "%s_OT_%s" % (self.PFX, opname), label, "", None))
                     items.append((opname, label))
                 self.menus.append((self.cls("MT", n), e.label or n.name, items))
             elif e.type == "LIST":
@@ -466,7 +469,7 @@ class Exporter:
         classes = [self.group_cls]
         if self.has_list:
             classes.insert(0, self.item_cls)
-        for idname, cname, label, desc in self.operators:
+        for idname, cname, label, desc, state in self.operators:
             out += ["class %s(bpy.types.Operator):" % cname,
                     "    bl_idname = %s" % _lit("%s.%s" % (self.prefix, idname)),
                     "    bl_label = %s" % _arg(label or idname)]
@@ -476,6 +479,8 @@ class Exporter:
                     "    def execute(self, context):",
                     "        props = context.scene.%s" % self.group,
                     "        # TODO: implement %s" % _lit(label or idname),
+                    ] + (["        props.%s = not props.%s  # flips the state the mockup showed; replace with real logic"
+                          % (state, state)] if state else []) + [
                     "        self.report({'INFO'}, %s)" % _arg("%s clicked" % (label or idname)),
                     "        return {'FINISHED'}", "", ""]
             classes.append(cname)
@@ -608,7 +613,7 @@ class Exporter:
     def llm(self):
         code = self.python()
         loc = el.PLACEMENTS[self.s.placement][0]
-        ops = ["- `%s.%s` — \"%s\"" % (self.prefix, name, label) for name, _, label, _ in self.operators]
+        ops = ["- `%s.%s` — \"%s\"" % (self.prefix, name, label) for name, _, label, _, _ in self.operators]
         props = []
         for n in self.nodes:
             decl, ctor = self.property_defs(n)

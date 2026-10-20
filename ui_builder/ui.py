@@ -265,7 +265,12 @@ def draw_element(layout, e):
         layout.prop(e, "spacer_factor")
     elif t == "BOOL":
         layout.prop(e, "bool_value", text="Default Value")
-        flags.append(("use_branches", None))
+        if e.bool_style == "STATE":
+            note = layout.box()
+            note.label(text="Hidden state: no widget. A Button set to", icon="INFO")
+            note.label(text="'Toggles State' flips it in the mockup.")
+        else:
+            flags.append(("use_branches", None))
     elif t in ("INT", "FLOAT", "SLIDER", "FACTOR", "PERCENT", "ANGLE", "DISTANCE", "STRING", "FILEPATH",
                "DIRPATH", "COLOR", "COLOR_ALPHA", "VEC2", "VEC3", "EULER", "SEARCH", "PROGRESS"):
         layout.prop(e, el.value_attr(e), text="Default Value")
@@ -297,6 +302,7 @@ def draw_element(layout, e):
         layout.prop(e, "preview_scale")
     elif t == "BUTTON":
         layout.label(text="Exports an operator stub", icon="INFO")
+        layout.prop(e, "toggle_target", text="Toggles State")
 
     # layout modifiers
     box = layout.box()
@@ -441,6 +447,7 @@ class UIB_PT_import(bpy.types.Panel):
         panels = import_ops.listed_panels(s) if s.import_module != "NONE" else []
         if panels:
             layout.prop(s, "import_explore")
+            layout.prop(s, "import_hidden")
             box = layout.box()
             col = box.column(align=True)
             for kind, cls, included in panels:

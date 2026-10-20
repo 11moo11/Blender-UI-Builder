@@ -16,12 +16,22 @@ class UIB_OT_mock_action(bpy.types.Operator):
 
     name: bpy.props.StringProperty(options={"SKIP_SAVE"})
     tip: bpy.props.StringProperty(options={"SKIP_SAVE"})
+    index: bpy.props.IntProperty(default=-1, options={"SKIP_SAVE"})  # element whose mockup state this click flips
 
     @classmethod
     def description(cls, context, properties):
         return properties.tip or "Mockup button (does nothing)"
 
     def execute(self, context):
+        s = context.scene.ui_builder
+        if 0 <= self.index < len(s.elements):
+            e = s.elements[self.index]
+            e.bool_value = not e.bool_value
+            self.report({"INFO"}, "Mockup state '%s' is now %s" % (e.label or e.ident, "on" if e.bool_value else "off"))
+            for win in context.window_manager.windows:
+                for area in win.screen.areas:
+                    area.tag_redraw()
+            return {"FINISHED"}
         self.report({"INFO"}, "Mockup button: %s" % (self.name or "unnamed"))
         return {"FINISHED"}
 
@@ -46,6 +56,9 @@ def _apply(layout, attrs):
 class Drawer:
     def __init__(self, settings):
         self.settings = settings
+        # hidden states a Button can flip, by identifier
+        self.states = {e.ident: i for i, e in enumerate(settings.elements)
+                       if e.type == "BOOL" and e.bool_style == "STATE"}
 
     # -- argument resolution -------------------------------------------------
     def _args(self, e, spec):
@@ -94,6 +107,8 @@ class Drawer:
         if spec.method == "operator" and result is not None:
             result.name = e.label
             result.tip = e.description
+            if e.toggle_target in self.states:
+                result.index = self.states[e.toggle_target]
 
     # -- tree ------------------------------------------------------------------
     def nodes(self, layout, nodes):
@@ -116,6 +131,12 @@ class Drawer:
             layout.active = False
         if e.type == "POPOVER":
             self.popover(layout, n)
+        elif e.type == "BOOL" and e.bool_style == "STATE":
+            row = layout.row()
+            row.active = False  # a note for the designer, not part of the real UI
+            row.prop(e, "bool_value", toggle=True, icon="PREFERENCES",
+                     text="State: %s (%s)" % (e.label or e.ident, "on" if e.bool_value else "off"))
+            self.branches(layout, n)
         elif d.container and e.type not in el.BRANCHING:
             self.container(layout, n)
         else:

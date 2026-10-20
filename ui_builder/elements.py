@@ -388,6 +388,8 @@ def leaf_specs(e, export=False):
     if t == "SPACER":
         return [Spec("separator", [], {"factor": round(e.spacer_factor, 3)})]
     if t == "BOOL":
+        if e.bool_style == "STATE":
+            return []  # no widget: only exists to switch branches
         if e.bool_style == "TOGGLE":
             kw["toggle"] = True
         elif e.bool_style == "ICON" and "icon" in kw:

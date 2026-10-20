@@ -1,5 +1,7 @@
 """Scene-level data model: the element list and builder settings."""
 
+import zlib
+
 import bpy
 from bpy.props import (
     BoolProperty, CollectionProperty, EnumProperty, FloatProperty, FloatVectorProperty,
@@ -33,6 +35,24 @@ def _enum_value_items(self, context):
 def _on_enum_items(self, context):
     from . import branches
     branches.sync_for(self, context)
+
+
+_state_cache = []
+
+
+def _state_items(self, context):
+    global _state_cache
+    # fixed numbers (not list positions) so a stored choice survives states being added, removed or reordered
+    items = [("NONE", "(none)", "", "NONE", 0)]
+    try:
+        for e in context.scene.ui_builder.elements:
+            if e.type == "BOOL" and e.bool_style == "STATE":
+                ident = e.ident or el.slugify(e.label)
+                items.append((ident, e.label or ident, "", "PREFERENCES", 1 + zlib.crc32(ident.encode()) % 0x7ffffffe))
+    except Exception:
+        pass
+    _state_cache = items
+    return _state_cache
 
 
 def _on_use_branches(self, context):
@@ -130,8 +150,14 @@ class UIB_Element(bpy.types.PropertyGroup):
     use_branches: BoolProperty(name="Branch on State", update=_on_use_branches, default=False,
                                description="Give the checkbox 'When checked' / 'When unchecked' rows; controls "
                                            "placed under a row are shown only in that state")
+    toggle_target: EnumProperty(name="Toggles State", items=_state_items,
+                                description="For a Button: the hidden state that clicking it switches in the "
+                                            "mockup (add one with Checkbox > Type: Hidden State)")
     bool_style: EnumProperty(name="Style", default="CHECKBOX", items=[
-        ("CHECKBOX", "Checkbox", ""), ("TOGGLE", "Toggle Button", ""), ("ICON", "Icon Toggle", "Needs an icon")])
+        ("CHECKBOX", "Checkbox", ""), ("TOGGLE", "Toggle Button", ""), ("ICON", "Icon Toggle", "Needs an icon"),
+        ("STATE", "Hidden State", "No widget: a state in the mockup that a Button can flip. What is under "
+                                  "'When checked' / 'When unchecked' shows or hides, like panels that reveal "
+                                  "settings after an action")])
     enum_style: EnumProperty(name="Type", default="DROPDOWN", items=[
         ("DROPDOWN", "Dropdown", ""),
         ("EXPAND", "Buttons (stacked)", "Buttons one above the other, like an expanded dropdown in a column"),
@@ -250,6 +276,12 @@ class UIB_Settings(bpy.types.PropertyGroup):
         description="Also capture what each option of a dropdown / tab shows, by temporarily switching the real "
                     "setting and drawing again (the original value is restored). Turn off if switching a "
                     "setting in that addon has side effects")
+    import_hidden: BoolProperty(
+        name="Explore Hidden State", default=False,
+        description="Also find controls that appear after an action (such as a Cast button), by flipping the "
+                    "addon's internal on/off flags one at a time and drawing again, then linking the Button "
+                    "above to the revealed controls. Flags are restored, but their update callbacks run, so "
+                    "leave this off if flipping them could start something (a render, a window...)")
     import_skip: CollectionProperty(type=UIB_ImportPanel)  # panels the user un-ticked
 
 

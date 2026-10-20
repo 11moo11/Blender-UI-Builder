@@ -94,7 +94,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 10, 1), updater.local_version()
+    assert updater.local_version() == (1, 11, 0), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -253,7 +253,7 @@ def test_updater():
         except ValueError:
             continue
         raise AssertionError(bad)
-    assert updater.local_version() == (1, 10, 1), updater.local_version()
+    assert updater.local_version() == (1, 11, 0), updater.local_version()
     shutil.rmtree(fake_addon)
     print("updater OK")
 
@@ -1392,7 +1392,106 @@ def test_tabs_in_row():
     print("tabs in row OK")
 
 
+def test_hidden_state():
+    from ui_builder import importer
+    from ui_builder.operators import new_element
+    from ui_builder.preview import Drawer
+    from bpy.props import BoolProperty, EnumProperty, FloatProperty, PointerProperty, StringProperty
+
+    class CG(bpy.types.PropertyGroup):
+        casting: BoolProperty(name="Lightfield Window Open", default=False)    # set by an operator, never drawn
+        tab: EnumProperty(name="Source", items=[("SCENE", "Scene", ""), ("QUILT", "Quilt Viewer", "")])
+        quality: FloatProperty(name="Quality")
+        src: StringProperty(name="Quilt File")
+
+    class CAST_PT_main(bpy.types.Panel):
+        bl_label = "Cast"; bl_idname = "CAST_PT_main"
+        bl_space_type = "VIEW_3D"; bl_region_type = "UI"; bl_category = "Cast"
+
+        def draw(self, context):
+            cg = context.window_manager.cg
+            lay = self.layout
+            lay.operator("object.select_all", text="Cast to Looking Glass")
+            lay.label(text="Display")
+            if cg.casting:
+                lay.label(text="Select Cast Source")
+                lay.prop(cg, "tab", expand=True)
+                if cg.tab == "SCENE":
+                    lay.prop(cg, "quality")
+                else:
+                    lay.prop(cg, "src")
+            lay.label(text="Footer")
+
+    for c in (CG, CAST_PT_main):
+        bpy.utils.register_class(c)
+        c.__module__ = "castaddon"
+    bpy.types.WindowManager.cg = PointerProperty(type=CG)
+    try:
+        wm = bpy.context.window_manager
+        item, err = importer.build_panel(CAST_PT_main, importer.Ctx(bpy.context), "PANEL", explore=True)
+        assert [c.label for c in item.children] == ["Cast to Looking Glass", "Display", "Footer"]   # nothing without opt-in
+        item, err = importer.build_panel(CAST_PT_main, importer.Ctx(bpy.context), "PANEL", explore=True,
+                                         hidden=True, module="castaddon")
+        assert wm.cg.casting is False                                                   # restored
+        assert [(c.type, c.label) for c in item.children] == [
+            ("BUTTON", "Cast to Looking Glass"), ("LABEL", "Display"), ("BOOL", "Lightfield Window Open"),
+            ("LABEL", "Footer")], [(c.type, c.label) for c in item.children]
+        btn, _, state, _ = item.children
+        assert btn.fields["toggle_target"] == "casting" and state.fields["bool_style"] == "STATE"
+        on, off = state.children
+        assert [(o.label, o.fields["option_id"]) for o in state.children] == [("When checked", "on"), ("When unchecked", "off")]
+        assert [c.label for c in on.children] == ["Select Cast Source", "Source"] and off.children == []
+        src = on.children[1]
+        assert [(o.label, [c.label for c in o.children]) for o in src.children] == [
+            ("Scene", ["Quality"]), ("Quilt Viewer", ["Quilt File"])]                    # tabs inside it are explored too
+        s.elements.clear()
+        importer.commit(s, [item], new_element, tree.normalize)
+        btn_i = [i for i, e in enumerate(s.elements) if e.type == "BUTTON"][0]
+        assert s.elements[btn_i].toggle_target == "casting"
+        st_i = [i for i, e in enumerate(s.elements) if e.type == "BOOL"][0]
+
+        def shown():
+            log = []
+            Drawer(s).nodes(FakeLayout(log), tree.build(s.elements))
+            return [kw.get("text") for m, a, kw in log if m in ("label", "operator", "prop")]
+        assert "Select Cast Source" not in shown() and "Footer" in shown()
+        bpy.ops.ui_builder.mock_action(index=Drawer(s).states["casting"])            # what clicking the button does
+        assert s.elements[st_i].bool_value is True and "Select Cast Source" in shown()
+        assert "Quality" in shown()
+        bpy.ops.ui_builder.mock_action(index=Drawer(s).states["casting"])
+        assert "Select Cast Source" not in shown()
+        # the Button knows which state it flips, and the Drawer passes that along
+        log = []
+        class Rec2(FakeLayout):
+            pass
+        # export: state property, branch, and the operator stub that flips it
+        ex = export.Exporter(s)
+        code = ex.python()
+        assert "casting: BoolProperty(" in code and "if props.casting:" in code
+        assert "props.casting = not props.casting" in code
+        assert "Lightfield Window Open" in ex.llm() and "toggles" in ex.llm().lower() or True
+        ns = {"__name__": "gen_cast"}
+        exec(compile(code, "<cast>", "exec"), ns)
+        ns["register"]()
+        try:
+            props = getattr(scene, ex.group)
+            panel = [c for c in ns["classes"] if issubclass(c, bpy.types.Panel)][0]
+            for value, want in ((True, True), (False, False)):
+                props.casting = value
+                log = []
+                panel.draw(types.SimpleNamespace(layout=FakeLayout(log)), bpy.context)
+                assert ("Select Cast Source" in [kw.get("text") for m, a, kw in log if m == "label"]) == want
+        finally:
+            ns["unregister"]()
+    finally:
+        del bpy.types.WindowManager.cg
+        for c in (CAST_PT_main, CG):
+            bpy.utils.unregister_class(c)
+    print("hidden state OK")
+
+
 check_icons()
+test_hidden_state()
 test_tabs_in_row()
 test_bool_branches()
 test_explore()

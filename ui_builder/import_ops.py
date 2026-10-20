@@ -66,7 +66,7 @@ class UIB_OT_import_addon(bpy.types.Operator):
         ctx = importer.Ctx(context)
         items, partial = {}, []
         for kind, cls in chosen:
-            item, error = importer.build_panel(cls, ctx, kind, explore=s.import_explore)
+            item, error = importer.build_panel(cls, ctx, kind, explore=s.import_explore, hidden=s.import_hidden, module=module)
             items[panel_id(cls)] = item
             if error:
                 partial.append("%s (%s)" % (item.label, error))

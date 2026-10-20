@@ -858,21 +858,164 @@ class _Explorer:
         container.children = container.children[:i + 1] + shared
 
 
-def build_panel(cls, ctx, kind="PANEL", explore=False):
+def _resolved(cls, ctx, kind, overrides):
+    """One recording with all Choice / checkbox branches found (under the given overrides)."""
+    item, error = _record(cls, ctx, kind, overrides)
+    if error:
+        return item, error
+    try:
+        hoisted, _ = _record(cls, ctx, kind, overrides, hoist=True)
+        explorer = _Explorer(cls, ctx, kind)
+        explorer.region(hoisted, [], 0, list(overrides), 0)
+        if explorer.branched:  # only keep the restructured drawing if it actually found branches
+            item = hoisted
+    except Exception:  # exploration is best effort: keep the plain drawing
+        pass
+    return item, error
+
+
+MAX_STATE_FLIPS = 60
+
+
+def _count(item):
+    return 1 + sum(_count(c) for c in item.children)
+
+
+def _state_candidates(module, drawn):
+    """Writable on/off flags of the addon's own property groups (found on the window manager, scene and
+    preferences) that no widget shows."""
+    groups = {c.bl_rna.identifier for c in _all_subclasses(bpy.types.PropertyGroup) if _in_module(c, module)}
+    if not groups:
+        return []
+    owners = []
+    for getter in (lambda: bpy.context.window_manager, lambda: bpy.context.scene,
+                   lambda: bpy.context.preferences.addons[module].preferences):
+        try:
+            owners.append(getter())
+        except Exception:
+            pass
+    out, seen = [], set()
+    for owner in owners:
+        try:
+            for prop in owner.bl_rna.properties:
+                if prop.type != "POINTER" or not prop.fixed_type or prop.fixed_type.identifier not in groups:
+                    continue
+                sub = getattr(owner, prop.identifier)
+                for q in sub.bl_rna.properties:
+                    key = (sub.as_pointer(), q.identifier)
+                    if q.type == "BOOLEAN" and not q.is_readonly and not getattr(q, "is_array", False) \
+                            and key not in drawn and key not in seen:
+                        seen.add(key)
+                        out.append((sub, q.identifier, q.name))
+        except Exception:
+            continue
+    return out
+
+
+def _diff(b, v, path=()):
+    """Where two drawings differ: (path of the container, index, base items, variant items)."""
+    bs, vs = [_sig(c) for c in b.children], [_sig(c) for c in v.children]
+    if bs == vs:
+        return None
+    low = min(len(bs), len(vs))
+    p = 0
+    while p < low and bs[p] == vs[p]:
+        p += 1
+    s = 0
+    while s < low - p and bs[-1 - s] == vs[-1 - s]:
+        s += 1
+    nb, nv = len(bs) - p - s, len(vs) - p - s
+    if nb == 1 and nv == 1 and b.children[p].type == v.children[p].type and b.children[p].children \
+            and v.children[p].children and b.children[p].type in ("ROW", "COLUMN", "BOX", "SPLIT", "GRID", "COLLAPSE"):
+        inner = _diff(b.children[p], v.children[p], path + (p,))
+        if inner:
+            return inner
+    return (list(path), p, b.children[p:len(bs) - s], v.children[p:len(vs) - s])
+
+
+def _preorder(item, out):
+    out.append(item)
+    for c in item.children:
+        _preorder(c, out)
+    return out
+
+
+def _button_before(root, path, p):
+    """The last Button drawn before position `p` of the container at `path`."""
+    container = _get(root, path)
+    order = _preorder(root, [])
+    pos = next(i for i, x in enumerate(order) if x is container)
+    pos += 1 + sum(_count(c) for c in container.children[:p])
+    for x in reversed(order[:pos]):
+        if x.type == "BUTTON":
+            return x
+    return None
+
+
+def _hidden_states(cls, ctx, kind, module, item):
+    """Flip the addon's hidden flags one by one: content that appears or disappears becomes a Hidden State
+    element (in place), and the Button drawn just above it is linked to switch it."""
+    drawn = set()
+    for x in _preorder(item, []):
+        if x.meta:
+            try:
+                drawn.add((x.meta["data"].as_pointer(), x.meta["prop"]))
+            except Exception:
+                pass
+    simplify(item)
+    ops = []
+    for sub, prop, label in _state_candidates(module, drawn)[:MAX_STATE_FLIPS]:
+        try:
+            cur = bool(getattr(sub, prop))
+        except Exception:
+            continue
+        var, err = _resolved(cls, ctx, kind, [(sub, prop, not cur)])
+        if err:
+            continue
+        simplify(var)
+        found = _diff(item, var)
+        if found:
+            path, p, base_items, var_items = found
+            ops.append((path, p, base_items, var_items, prop, label,
+                        _button_before(item, path, p)))
+    applied = {}
+    for path, p, base_items, var_items, prop, label, button in sorted(ops, key=lambda o: (o[0], o[1]), reverse=True):
+        key = tuple(path)
+        if key in applied and p + len(base_items) > applied[key]:
+            continue  # overlaps a change already made in this container
+        richer_is_base = sum(_count(x) for x in base_items) >= sum(_count(x) for x in var_items)
+        on_items, off_items = (base_items, var_items) if richer_is_base else (var_items, base_items)
+        ident = el_slug(prop)
+        state = Item("BOOL", label, ident=ident, bool_style="STATE", use_branches=True, bool_value=richer_is_base)
+        for oid, name, content in (("on", "When checked", on_items), ("off", "When unchecked", off_items)):
+            opt = Item("OPTION", name, option_id=oid)
+            opt.children = list(content)
+            state.children.append(opt)
+        container = _get(item, path)
+        container.children[p:p + len(base_items)] = [state]
+        applied[key] = p
+        if button is not None:
+            button.fields["toggle_target"] = ident
+
+
+def el_slug(text):
+    return el.slugify(text)
+
+
+def build_panel(cls, ctx, kind="PANEL", explore=False, hidden=False, module=""):
     """Item tree for one UI class. Returns (item, error_message or '').
 
     With `explore`, every option of the Choices it draws is tried (temporarily switching the real
     property) so conditional content ends up under the matching Option row.
     """
-    item, error = _record(cls, ctx, kind, [])
-    if explore and not error:
+    if explore:
+        item, error = _resolved(cls, ctx, kind, [])
+    else:
+        item, error = _record(cls, ctx, kind, [])
+    if hidden and module and not error:
         try:
-            hoisted, _ = _record(cls, ctx, kind, [], hoist=True)
-            explorer = _Explorer(cls, ctx, kind)
-            explorer.region(hoisted, [], 0, [], 0)
-            if explorer.branched:  # only keep the restructured drawing if it actually found branches
-                item = hoisted
-        except Exception:  # exploration is best effort: keep the plain drawing
+            _hidden_states(cls, ctx, kind, module, item)
+        except Exception:  # best effort
             pass
     if kind == "PANEL" and hasattr(cls, "draw_header"):
         try:
@@ -915,10 +1058,15 @@ def fold_all(s):
 
 def commit(s, items, new_element, normalize):
     """Append Item trees to the builder's element list."""
+    deferred = []  # (element index, state ident): the state element may come later in the list
+
     def add(item, depth):
         e = new_element(s, item.type, len(s.elements), depth, item.label)
+        index = len(s.elements) - 1
         e.auto_ident = False
         fields = dict(item.fields)
+        if "toggle_target" in fields:
+            deferred.append((index, fields.pop("toggle_target")))
         if "ident" in fields:
             e.ident = el.slugify(fields.pop("ident"))
         order = sorted(fields.items(), key=lambda kv: kv[0] == "enum_value")
@@ -933,6 +1081,11 @@ def commit(s, items, new_element, normalize):
     with branches.no_sync():
         for it in items:
             add(it, 0)
+        for index, ident in deferred:
+            try:
+                s.elements[index].toggle_target = ident
+            except (TypeError, ValueError):
+                pass
     normalize(s.elements)
     branches.sync_all(s)
     fold_all(s)
