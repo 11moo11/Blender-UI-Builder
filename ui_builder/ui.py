@@ -221,21 +221,19 @@ def draw_element(layout, e):
     if d.desc:
         layout.prop(e, "description", text="Tooltip")
 
-    # what is specific to this element type
+    # what is specific to this element type. Every on/off option is collected into one grid below.
+    flags = []  # (property, label or None)
     if t == "TEXT_LINES":
         layout.label(text="Separate lines with |  in the name")
     elif t == "PANEL":
-        layout.prop(e, "default_closed")
-        layout.prop(e, "header_checkbox")
+        flags += [("default_closed", None), ("header_checkbox", None)]
     elif t in ("ROW", "COLUMN", "SPLIT", "GRID"):
-        layout.prop(e, "align", text="Connect Items (no gaps)")
+        flags.append(("align", "Connect Items"))
         if t == "SPLIT":
             layout.prop(e, "split_factor")
         if t == "GRID":
             layout.prop(e, "grid_columns")
-            layout.prop(e, "grid_row_major")
-            layout.prop(e, "grid_even_columns")
-            layout.prop(e, "grid_even_rows")
+            flags += [("grid_row_major", None), ("grid_even_columns", None), ("grid_even_rows", None)]
     elif t in ("SEPARATOR", "SPACER"):
         layout.prop(e, "spacer_factor")
     elif t == "BOOL":
@@ -244,11 +242,11 @@ def draw_element(layout, e):
                "DIRPATH", "COLOR", "COLOR_ALPHA", "VEC2", "VEC3", "EULER", "SEARCH", "PROGRESS"):
         layout.prop(e, el.value_attr(e), text="Default Value")
         if t == "COLOR":
-            layout.prop(e, "use_alpha")
+            flags.append(("use_alpha", None))
         if t == "SEARCH":
             layout.prop(e, "search_source")
         if t in ("INT", "FLOAT", "SLIDER", "FACTOR", "PERCENT", "ANGLE", "DISTANCE"):
-            layout.prop(e, "use_range")
+            flags.append(("use_range", None))
             if e.use_range:
                 r = layout.row(align=True)
                 r.prop(e, "range_min")
@@ -261,7 +259,7 @@ def draw_element(layout, e):
             warn.label(text="Placeholder options: the real ones", icon="ERROR")
             warn.label(text="could not be read. Replace them.")
         if t == "ENUM" and e.enum_style != "DROPDOWN":
-            layout.prop(e, "enum_icon_only")
+            flags.append(("enum_icon_only", None))
         layout.prop(e, "enum_value", text="Default Value")
     elif t in ("POINTER", "TEMPLATE_ID"):
         layout.prop(e, "id_type")
@@ -276,12 +274,16 @@ def draw_element(layout, e):
     box = layout.box()
     col = box.column(align=True)
     grid = col.grid_flow(row_major=True, even_columns=True, even_rows=True)
-    grid.prop(e, "enabled")
-    grid.prop(e, "alert")
+    flags += [("enabled", None), ("alert", None)]
     if t in el.SPLIT_TYPES:
-        grid.prop(e, "prop_split", text="Show Name on Left")
+        flags.append(("prop_split", "Show Name on Left"))
     elif d.container and t not in ("POPOVER", "OPTION"):
-        grid.prop(e, "prop_split", text="Property Split (children)")
+        flags.append(("prop_split", "Property Split (children)"))
+    for prop, text in flags:
+        if text:
+            grid.prop(e, prop, text=text)
+        else:
+            grid.prop(e, prop)
     col.prop(e, "scale_x")
     col.prop(e, "scale_y")
     col.prop(e, "emboss")
